@@ -13,17 +13,17 @@
             fx:controller="ChatController"
             prefWidth="760.0"
             prefHeight="600.0"
-            style="-fx-background-color: #101722;">
+            style="-fx-background-color: #39b6b6;">
 
     <top>
-        <VBox spacing="5.0" style="-fx-background-color: #182331;">
+        <VBox spacing="5.0" style="-fx-background-color: #39b6b6;">
             <padding>
                 <Insets top="22.0" right="26.0" bottom="20.0" left="26.0"/>
             </padding>
             <Label text="MarIA"
                    style="-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #f4f7fb;"/>
             <Label text="Tu asistente con Gemini  •  Pregunta lo que quieras"
-                   style="-fx-font-size: 13px; -fx-text-fill: #9aabba;"/>
+                   style="-fx-font-size: 13px; -fx-text-fill: #f0f8ff;"/>
         </VBox>
     </top>
 
@@ -45,12 +45,12 @@
                            promptText="Escribe tu pregunta…"
                            onAction="#sendQuestion"
                            HBox.hgrow="ALWAYS"
-                           style="-fx-background-color: #202d3c; -fx-text-fill: #f4f7fb; -fx-prompt-text-fill: #8495a7; -fx-background-radius: 10px; -fx-padding: 13px; -fx-font-size: 14px;"/>
+                           style="-fx-background-color: #262656; -fx-text-fill: #f4f7fb; -fx-prompt-text-fill: #8495a7; -fx-background-radius: 10px; -fx-padding: 13px; -fx-font-size: 14px;"/>
                 <Button fx:id="sendButton"
                         text="Enviar"
                         onAction="#sendQuestion"
                         defaultButton="true"
-                        style="-fx-background-color: #18a6a6; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 12px 20px; -fx-cursor: hand;"/>
+                        style="-fx-background-color: #5c5cd0; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 12px 20px; -fx-cursor: hand;"/>
             </HBox>
             <Label text="La clave API se lee desde las variables de entorno de Windows."
                    style="-fx-font-size: 11px; -fx-text-fill: #718196;"/>

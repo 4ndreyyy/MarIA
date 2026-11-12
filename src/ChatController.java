@@ -9,7 +9,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.web.WebView;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
-
+import javafx.concurrent.Worker;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -29,6 +29,16 @@ public class ChatController {
 
     @FXML
     private void initialize() {
+        chatView.getEngine().getLoadWorker().stateProperty().addListener(
+                (observable, anterior, estado) -> {
+                    if (estado == Worker.State.SUCCEEDED) {
+                        chatView.getEngine().executeScript(
+                                "window.scrollTo(0, document.body.scrollHeight);"
+                        );
+                    }
+                }
+        );
+
         String apiKey = System.getenv("GOOGLE_API_KEY");
         if (apiKey == null || apiKey.isBlank()) {
             apiKey = System.getenv("GEMINI_API_KEY");

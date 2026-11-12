@@ -42,7 +42,7 @@ import java.util.Scanner;
 
                     try {
                         GenerateContentResponse respuesta = client.models.generateContent(
-                                "gemini-3.5-flash-lite",
+                                "gemini-3.5-flash",
                                 pregunta,
                                 null
                         );
