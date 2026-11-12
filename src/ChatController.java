@@ -215,7 +215,7 @@ public class ChatController {
                     );
 
                     response = client.models.generateContent(
-                            "gemini-3.5-flash",
+                            "gemini-3.5-flash-lite",
                             pregunta,
                             null
                     );
@@ -259,7 +259,7 @@ public class ChatController {
                     }
 
                     response = client.models.generateContent(
-                            "gemini-3.5-flash",
+                            "gemini-3.5-flash-lite",
                             contenido,
                             null
                     );

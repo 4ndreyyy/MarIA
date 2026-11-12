@@ -13,7 +13,7 @@ import java.sql.Types;
 
 /** Guarda y consulta conversaciones y mensajes de Oracle. */
 public final class ChatDAO {
-    private static final String CODIGO_MODELO = "gemini-3.5-flash";
+    private static final String CODIGO_MODELO = "gemini-3.5-flash-lite";
 
     public String crearChat(String idUsuario, String primeraPregunta)
             throws SQLException {
