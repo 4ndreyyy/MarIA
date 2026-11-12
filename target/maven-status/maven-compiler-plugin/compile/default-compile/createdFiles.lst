@@ -1,1 +1,7 @@
 ChatController$ChatMessage.class
+UsuarioDAO.class
+ConexionBD.class
+RegistroController.class
+UsuarioSesion.class
+ChatDAO.class
+LoginController.class

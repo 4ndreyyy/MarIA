@@ -3,16 +3,25 @@ import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.HttpOptions;
 import com.google.genai.types.HttpRetryOptions;
 import javafx.application.Platform;
+import javafx.concurrent.Worker;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextField;
 import javafx.scene.web.WebView;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
-import javafx.concurrent.Worker;
+
+import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 public class ChatController {
     @FXML private WebView chatView;
@@ -20,12 +29,17 @@ public class ChatController {
     @FXML private Button sendButton;
 
     private Client client;
+    private final ChatDAO chatDAO = new ChatDAO();
+    private String idChatActual;
+    private UsuarioSesion usuarioSesion;
+
     private final List<ChatMessage> messages = new ArrayList<>();
     private final Parser markdownParser = Parser.builder().build();
-    private final HtmlRenderer markdownRenderer = HtmlRenderer.builder()
-            .escapeHtml(true)
-            .sanitizeUrls(true)
-            .build();
+    private final HtmlRenderer markdownRenderer =
+            HtmlRenderer.builder()
+                    .escapeHtml(true)
+                    .sanitizeUrls(true)
+                    .build();
 
     @FXML
     private void initialize() {
@@ -45,8 +59,12 @@ public class ChatController {
         }
 
         if (apiKey == null || apiKey.isBlank()) {
-            messages.add(new ChatMessage("assistant",
-                    "No se encontró la API key. Configura `GOOGLE_API_KEY` en Run → Edit Configurations → Environment variables y vuelve a iniciar la aplicación."));
+            messages.add(new ChatMessage(
+                    "assistant",
+                    "No se encontró la API key. Configura `GOOGLE_API_KEY` " +
+                            "en Run → Edit Configurations → Environment variables " +
+                            "y vuelve a iniciar la aplicación."
+            ));
             questionField.setDisable(true);
             sendButton.setDisable(true);
             renderMessages();
@@ -63,15 +81,20 @@ public class ChatController {
                         .build())
                 .build();
 
-        messages.add(new ChatMessage("assistant",
-                "¡Hola! Soy MarIA. Escribe una pregunta y te responderé con formato: **negritas**, listas, títulos y bloques de código."));
+        messages.add(new ChatMessage(
+                "assistant",
+                "¡Hola! Soy MarIA. Escribe una pregunta y te responderé " +
+                        "con formato: **negritas**, listas, títulos y bloques de código."
+        ));
         renderMessages();
     }
 
     @FXML
     private void sendQuestion() {
         String question = questionField.getText().trim();
-        if (question.isEmpty() || client == null) return;
+        if (question.isEmpty() || client == null) {
+            return;
+        }
 
         questionField.clear();
         questionField.setDisable(true);
@@ -84,9 +107,49 @@ public class ChatController {
         renderMessages();
 
         CompletableFuture.supplyAsync(() -> {
-            GenerateContentResponse response = client.models.generateContent(
-                    "gemini-3.5-flash-lite", question, null);
-            return response.text();
+            try {
+                if (usuarioSesion == null) {
+                    throw new IllegalStateException(
+                            "No hay una sesión de usuario activa."
+                    );
+                }
+
+                if (idChatActual == null) {
+                    idChatActual = chatDAO.crearChat(
+                            usuarioSesion.idUsuario(),
+                            question
+                    );
+                }
+
+                chatDAO.guardarMensaje(
+                        idChatActual,
+                        "USUARIO",
+                        "IA",
+                        question
+                );
+
+                GenerateContentResponse response =
+                        client.models.generateContent(
+                                "gemini-3.5-flash",
+                                question,
+                                null
+                        );
+
+                String respuesta = response.text();
+
+                if (respuesta != null && !respuesta.isBlank()) {
+                    chatDAO.guardarMensaje(
+                            idChatActual,
+                            "GEMINI",
+                            "US",
+                            respuesta
+                    );
+                }
+
+                return respuesta;
+            } catch (SQLException error) {
+                throw new CompletionException(error);
+            }
         }).whenComplete((answer, error) -> Platform.runLater(() -> {
             questionField.setDisable(false);
             sendButton.setDisable(false);
@@ -94,12 +157,15 @@ public class ChatController {
 
             if (error != null) {
                 pendingAnswer.text =
-                        "No se pudo obtener la respuesta: " + rootMessage(error);
+                        "No se pudo completar o guardar la consulta: "
+                                + rootMessage(error);
             } else {
-                pendingAnswer.text = answer == null || answer.isBlank()
-                        ? "Gemini no devolvió texto."
-                        : answer;
+                pendingAnswer.text =
+                        answer == null || answer.isBlank()
+                                ? "Gemini no devolvió texto."
+                                : answer;
             }
+
             renderMessages();
         }));
     }
@@ -134,13 +200,24 @@ public class ChatController {
 
         for (ChatMessage message : messages) {
             if (message.role.equals("user")) {
-                html.append("<div class='message user'><div class='role'>Tú</div><div>")
-                        .append(escapeHtml(message.text).replace("\n", "<br>"))
+                html.append(
+                                "<div class='message user'><div class='role'>Tú</div><div>"
+                        )
+                        .append(
+                                escapeHtml(message.text)
+                                        .replace("\n", "<br>")
+                        )
                         .append("</div></div>");
             } else {
-                html.append("<div class='message assistant'><div class='role'>Gemini</div><div class='content'>")
-                        .append(markdownRenderer.render(
-                                markdownParser.parse(message.text)))
+                html.append(
+                                "<div class='message assistant'>" +
+                                        "<div class='role'>Gemini</div><div class='content'>"
+                        )
+                        .append(
+                                markdownRenderer.render(
+                                        markdownParser.parse(message.text)
+                                )
+                        )
                         .append("</div></div>");
             }
         }
@@ -159,10 +236,43 @@ public class ChatController {
 
     private String rootMessage(Throwable error) {
         Throwable root = error;
-        while (root.getCause() != null) root = root.getCause();
+        while (root.getCause() != null) {
+            root = root.getCause();
+        }
+
         return root.getMessage() == null
                 ? root.getClass().getSimpleName()
                 : root.getMessage();
+    }
+
+    @FXML
+    private void abrirRegistro() {
+        try {
+            FXMLLoader loader = new FXMLLoader(
+                    getClass().getResource("/registro.fxml")
+            );
+
+            Stage ventana = new Stage();
+            ventana.setTitle("Crear cuenta");
+            ventana.initOwner(chatView.getScene().getWindow());
+            ventana.initModality(Modality.APPLICATION_MODAL);
+            ventana.setResizable(false);
+            ventana.setScene(new Scene(loader.load()));
+            ventana.showAndWait();
+
+        } catch (IOException | RuntimeException error) {
+            Alert alerta = new Alert(Alert.AlertType.ERROR);
+            alerta.setTitle("Error");
+            alerta.setHeaderText("No se pudo abrir el registro");
+            alerta.setContentText(
+                    "Revisa que registro.fxml esté en src/main/resources."
+            );
+            alerta.showAndWait();
+        }
+    }
+
+    public void setUsuarioSesion(UsuarioSesion usuarioSesion) {
+        this.usuarioSesion = usuarioSesion;
     }
 
     private static final class ChatMessage {

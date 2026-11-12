@@ -37,6 +37,9 @@
 
     <bottom>
         <VBox spacing="9.0">
+            <Button text="Crear cuenta"
+                    onAction="#abrirRegistro"
+                    style="-fx-background-color: #18a6a6; -fx-text-fill: white; -fx-font-weight: bold;"/>
             <padding>
                 <Insets top="4.0" right="26.0" bottom="22.0" left="26.0"/>
             </padding>
