@@ -1,14 +1,22 @@
+import javafx.application.Application;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Scene;
+import javafx.stage.Stage;
 
-public class Main {
+public class Main extends Application {
+    @Override
+    public void start(Stage stage) throws Exception {
+        FXMLLoader loader = new FXMLLoader(Main.class.getResource("/interfaz.fxml"));
+        Scene scene = new Scene(loader.load());
+
+        stage.setTitle("MarIA · Chat con Gemini");
+        stage.setMinWidth(560);
+        stage.setMinHeight(440);
+        stage.setScene(scene);
+        stage.show();
+    }
+
     public static void main(String[] args) {
-        String apiKey = System.getenv("GEMINI_API_KEY");
-
-        if (apiKey == null || apiKey.isEmpty()) {
-            System.out.println("Error: La API key no está configurada.");
-            return;
-        }
-
-        System.out.println("¡API Key cargada correctamente!");
-        // Usa tu apiKey aquí para inicializar tu cliente o servicio
+        launch(args);
     }
 }
