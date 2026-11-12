@@ -2,34 +2,37 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
-<?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
+<?import javafx.scene.web.WebView?>
 
-<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-            fx:controller="ChatController" prefWidth="760.0" prefHeight="600.0"
+<BorderPane xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="ChatController"
+            prefWidth="760.0"
+            prefHeight="600.0"
             style="-fx-background-color: #101722;">
+
     <top>
         <VBox spacing="5.0" style="-fx-background-color: #182331;">
             <padding>
                 <Insets top="22.0" right="26.0" bottom="20.0" left="26.0"/>
             </padding>
-            <Label text="MarIA" style="-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #f4f7fb;"/>
+            <Label text="MarIA"
+                   style="-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #f4f7fb;"/>
             <Label text="Tu asistente con Gemini  •  Pregunta lo que quieras"
                    style="-fx-font-size: 13px; -fx-text-fill: #9aabba;"/>
         </VBox>
     </top>
 
     <center>
-        <TextArea fx:id="chatArea" editable="false" wrapText="true"
-                  promptText="La conversación aparecerá aquí…"
-                  style="-fx-control-inner-background: #141e2a; -fx-text-fill: #e8eef5; -fx-highlight-fill: #1b9aaa; -fx-font-size: 14px; -fx-background-radius: 12px;">
+        <WebView fx:id="chatView">
             <BorderPane.margin>
-                <Insets top="22.0" right="26.0" bottom="16.0" left="26.0"/>
+                <Insets top="18.0" right="18.0" bottom="14.0" left="18.0"/>
             </BorderPane.margin>
-        </TextArea>
+        </WebView>
     </center>
 
     <bottom>
@@ -38,10 +41,15 @@
                 <Insets top="4.0" right="26.0" bottom="22.0" left="26.0"/>
             </padding>
             <HBox spacing="10.0" alignment="CENTER">
-                <TextField fx:id="questionField" promptText="Escribe tu pregunta…"
-                           onAction="#sendQuestion" HBox.hgrow="ALWAYS"
+                <TextField fx:id="questionField"
+                           promptText="Escribe tu pregunta…"
+                           onAction="#sendQuestion"
+                           HBox.hgrow="ALWAYS"
                            style="-fx-background-color: #202d3c; -fx-text-fill: #f4f7fb; -fx-prompt-text-fill: #8495a7; -fx-background-radius: 10px; -fx-padding: 13px; -fx-font-size: 14px;"/>
-                <Button fx:id="sendButton" text="Enviar" onAction="#sendQuestion" defaultButton="true"
+                <Button fx:id="sendButton"
+                        text="Enviar"
+                        onAction="#sendQuestion"
+                        defaultButton="true"
                         style="-fx-background-color: #18a6a6; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 12px 20px; -fx-cursor: hand;"/>
             </HBox>
             <Label text="La clave API se lee desde las variables de entorno de Windows."

@@ -1,0 +1,29 @@
+[33mcommit 39100d46d878b0a1e5cb60aa504fbd4d82087313[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: 4ndreyyy <pabloandrey.garcia@gmail.com>
+Date:   Thu Nov 12 00:02:36 2026 -0600
+
+    Interfaz v0.2
+
+[33mcommit 2c0c13cda6b7d02b5b6dab1caf73e9160e871b0a[m
+Author: 4ndreyyy <pabloandrey.garcia@gmail.com>
+Date:   Wed Nov 11 23:49:43 2026 -0600
+
+    Implementacion de interfaz
+
+[33mcommit 250784d26c5f7f7267f2e7da049ea857a9262d3a[m
+Author: 4ndreyyy <pabloandrey.garcia@gmail.com>
+Date:   Wed Nov 11 23:30:26 2026 -0600
+
+    Cree las clases e implemente Gemini Flash, Aun faltan las interfaz
+
+[33mcommit e5cad758ea51cb395148ffbf93134fb5c8b0a09b[m
+Author: 4ndreyyy <pabloandrey.garcia@gmail.com>
+Date:   Wed Nov 11 10:23:31 2026 -0600
+
+    Version 11/11/2026, Agregue el API key de gemini 3.8 flash, pero esta incompleto aun
+
+[33mcommit 0f4c1b3d3b7aa9f56f97448d4a8057d55ac19c0e[m
+Author: 4ndreyyy <pabloandrey.garcia@gmail.com>
+Date:   Tue Nov 10 20:59:23 2026 -0600
+
+    Archivo Base de MarIA, Proyecto de FBDD
