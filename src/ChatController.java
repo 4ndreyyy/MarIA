@@ -15,7 +15,7 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
-
+import javafx.scene.control.ListView;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -27,7 +27,9 @@ public class ChatController {
     @FXML private WebView chatView;
     @FXML private TextField questionField;
     @FXML private Button sendButton;
+    @FXML private ListView<ChatDAO.ChatResumen> historyList;
 
+    private int versionCargaChat;
     private Client client;
     private final ChatDAO chatDAO = new ChatDAO();
     private String idChatActual;
@@ -43,6 +45,15 @@ public class ChatController {
 
     @FXML
     private void initialize() {
+        historyList.getSelectionModel()
+                .selectedItemProperty()
+                .addListener((observable, anterior, seleccion) -> {
+                    if (seleccion != null
+                            && !seleccion.idChat().equals(idChatActual)) {
+                        cargarChat(seleccion);
+                    }
+                });
+
         chatView.getEngine().getLoadWorker().stateProperty().addListener(
                 (observable, anterior, estado) -> {
                     if (estado == Worker.State.SUCCEEDED) {
@@ -155,6 +166,7 @@ public class ChatController {
             sendButton.setDisable(false);
             questionField.requestFocus();
 
+
             if (error != null) {
                 pendingAnswer.text =
                         "No se pudo completar o guardar la consulta: "
@@ -167,6 +179,8 @@ public class ChatController {
             }
 
             renderMessages();
+            renderMessages();
+            cargarConversaciones();
         }));
     }
 
@@ -246,6 +260,116 @@ public class ChatController {
     }
 
     @FXML
+    private void nuevoChat() {
+        versionCargaChat++;
+        idChatActual = null;
+
+        historyList.getSelectionModel().clearSelection();
+
+        questionField.setDisable(false);
+        sendButton.setDisable(false);
+
+        messages.clear();
+        messages.add(new ChatMessage(
+                "assistant",
+                "¡Hola! Soy MarIA. Escribe una pregunta y te responderé."
+        ));
+
+        renderMessages();
+    }
+
+    private void cargarConversaciones() {
+        if (usuarioSesion == null) {
+            return;
+        }
+
+        String idUsuario = usuarioSesion.idUsuario();
+        String idChatSeleccionado = idChatActual;
+
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return chatDAO.listarChats(idUsuario);
+            } catch (SQLException error) {
+                throw new CompletionException(error);
+            }
+        }).whenComplete((chats, error) -> Platform.runLater(() -> {
+            if (error != null) {
+                messages.add(new ChatMessage(
+                        "assistant",
+                        "No se pudo cargar el historial: " + rootMessage(error)
+                ));
+                renderMessages();
+                return;
+            }
+
+            historyList.getItems().setAll(chats);
+
+            if (idChatSeleccionado != null) {
+                for (int i = 0; i < chats.size(); i++) {
+                    if (chats.get(i).idChat().equals(idChatSeleccionado)) {
+                        historyList.getSelectionModel().select(i);
+                        break;
+                    }
+                }
+            }
+        }));
+    }
+
+    private void cargarChat(ChatDAO.ChatResumen chat) {
+        if (usuarioSesion == null) {
+            return;
+        }
+
+        int version = ++versionCargaChat;
+        String idUsuario = usuarioSesion.idUsuario();
+
+        questionField.setDisable(true);
+        sendButton.setDisable(true);
+
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return chatDAO.listarMensajes(chat.idChat(), idUsuario);
+            } catch (SQLException error) {
+                throw new CompletionException(error);
+            }
+        }).whenComplete((mensajesGuardados, error) ->
+                Platform.runLater(() -> {
+                    if (version != versionCargaChat) {
+                        return;
+                    }
+
+                    questionField.setDisable(false);
+                    sendButton.setDisable(false);
+
+                    if (error != null) {
+                        messages.add(new ChatMessage(
+                                "assistant",
+                                "No se pudo abrir esta conversación: "
+                                        + rootMessage(error)
+                        ));
+                        renderMessages();
+                        return;
+                    }
+
+                    idChatActual = chat.idChat();
+                    messages.clear();
+
+                    for (ChatDAO.MensajeGuardado mensaje : mensajesGuardados) {
+                        boolean esUsuario =
+                                mensaje.emisor().equalsIgnoreCase("USUARIO");
+
+                        messages.add(new ChatMessage(
+                                esUsuario ? "user" : "assistant",
+                                mensaje.contenido()
+                        ));
+                    }
+
+                    renderMessages();
+                })
+        );
+    }
+
+    @FXML
     private void abrirRegistro() {
         try {
             FXMLLoader loader = new FXMLLoader(
@@ -273,6 +397,7 @@ public class ChatController {
 
     public void setUsuarioSesion(UsuarioSesion usuarioSesion) {
         this.usuarioSesion = usuarioSesion;
+        cargarConversaciones();
     }
 
     private static final class ChatMessage {

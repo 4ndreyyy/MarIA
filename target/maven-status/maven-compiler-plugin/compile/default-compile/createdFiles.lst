@@ -1,7 +1,9 @@
 ChatController$ChatMessage.class
 UsuarioDAO.class
 ConexionBD.class
+ChatDAO$MensajeGuardado.class
 RegistroController.class
 UsuarioSesion.class
 ChatDAO.class
+ChatDAO$ChatResumen.class
 LoginController.class

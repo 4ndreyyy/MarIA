@@ -2,6 +2,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
@@ -11,50 +12,74 @@
 <BorderPane xmlns="http://javafx.com/javafx/21"
             xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="ChatController"
-            prefWidth="760.0"
-            prefHeight="600.0"
+            prefWidth="980.0"
+            prefHeight="650.0"
             style="-fx-background-color: #39b6b6;">
 
     <top>
-        <VBox spacing="5.0" style="-fx-background-color: #39b6b6;">
+        <VBox spacing="5.0"
+              style="-fx-background-color: #39b6b6;">
             <padding>
                 <Insets top="22.0" right="26.0" bottom="20.0" left="26.0"/>
             </padding>
+
             <Label text="MarIA"
                    style="-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #f4f7fb;"/>
+
             <Label text="Tu asistente con Gemini  •  Pregunta lo que quieras"
                    style="-fx-font-size: 13px; -fx-text-fill: #f0f8ff;"/>
         </VBox>
     </top>
 
     <center>
-        <WebView fx:id="chatView">
+        <HBox spacing="12.0">
             <BorderPane.margin>
                 <Insets top="18.0" right="18.0" bottom="14.0" left="18.0"/>
             </BorderPane.margin>
-        </WebView>
+
+            <VBox spacing="8.0"
+                  prefWidth="230.0"
+                  minWidth="190.0"
+                  maxWidth="250.0"
+                  style="-fx-background-color: #172431; -fx-padding: 12; -fx-background-radius: 10;">
+                <Label text="Mis conversaciones"
+                       style="-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: white;"/>
+
+                <Button text="＋ Nuevo chat"
+                        onAction="#nuevoChat"
+                        maxWidth="Infinity"
+                        style="-fx-background-color: #18a6a6; -fx-text-fill: white; -fx-font-weight: bold;"/>
+
+                <ListView fx:id="historyList"
+                          VBox.vgrow="ALWAYS"
+                          style="-fx-background-color: #141e2a;"/>
+            </VBox>
+
+            <WebView fx:id="chatView"
+                     HBox.hgrow="ALWAYS"/>
+        </HBox>
     </center>
 
     <bottom>
         <VBox spacing="9.0">
-            <Button text="Crear cuenta"
-                    onAction="#abrirRegistro"
-                    style="-fx-background-color: #18a6a6; -fx-text-fill: white; -fx-font-weight: bold;"/>
             <padding>
                 <Insets top="4.0" right="26.0" bottom="22.0" left="26.0"/>
             </padding>
+
             <HBox spacing="10.0" alignment="CENTER">
                 <TextField fx:id="questionField"
                            promptText="Escribe tu pregunta…"
                            onAction="#sendQuestion"
                            HBox.hgrow="ALWAYS"
                            style="-fx-background-color: #262656; -fx-text-fill: #f4f7fb; -fx-prompt-text-fill: #8495a7; -fx-background-radius: 10px; -fx-padding: 13px; -fx-font-size: 14px;"/>
+
                 <Button fx:id="sendButton"
                         text="Enviar"
                         onAction="#sendQuestion"
                         defaultButton="true"
                         style="-fx-background-color: #5c5cd0; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 12px 20px; -fx-cursor: hand;"/>
             </HBox>
+
             <Label text="La clave API se lee desde las variables de entorno de Windows."
                    style="-fx-font-size: 11px; -fx-text-fill: #718196;"/>
         </VBox>
