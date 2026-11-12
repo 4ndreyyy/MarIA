@@ -8,7 +8,8 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-
+import java.io.ByteArrayInputStream;
+import java.sql.Types;
 
 /** Guarda y consulta conversaciones y mensajes de Oracle. */
 public final class ChatDAO {
@@ -128,7 +129,7 @@ public final class ChatDAO {
             String idUsuario
     ) throws SQLException {
         String sql = """
-                SELECT m.EMISOR, m.CONTENIDO
+                SELECT m.EMISOR, m.CONTENIDO, m.NOMBRE_ARCHIVO
                 FROM HR.MENSAJES m
                 JOIN HR.CHATS c ON c.ID_CHATS = m.ID_CHATS
                 WHERE c.ID_CHATS = ?
@@ -147,7 +148,11 @@ public final class ChatDAO {
                 while (rs.next()) {
                     String emisor = rs.getString("EMISOR");
                     String contenido = leerClob(rs.getCharacterStream("CONTENIDO"));
+                    String nombreArchivo = rs.getString("NOMBRE_ARCHIVO");
 
+                    if (nombreArchivo != null && !nombreArchivo.isBlank()) {
+                        contenido += "\n\n📎 " + nombreArchivo;
+                    }
                     mensajes.add(new MensajeGuardado(
                             emisor == null ? "" : emisor.trim(),
                             contenido
@@ -157,6 +162,108 @@ public final class ChatDAO {
         }
 
         return mensajes;
+    }
+
+    public void guardarMensajeConArchivo(
+            String idChat,
+            String emisor,
+            String receptor,
+            String texto,
+            String nombreArchivo,
+            String mimeType,
+            String extension,
+            byte[] contenidoArchivo
+    ) throws SQLException {
+        if (contenidoArchivo == null || contenidoArchivo.length == 0) {
+            throw new SQLException("El archivo está vacío.");
+        }
+
+        if (nombreArchivo == null || nombreArchivo.length() > 100) {
+            throw new SQLException(
+                    "El nombre del archivo no puede superar 100 caracteres."
+            );
+        }
+
+        if (texto == null) {
+            texto = "";
+        }
+
+        String idMensaje = nuevoId();
+        String idArchivo = nuevoId();
+
+        String sqlMensaje = """
+            INSERT INTO HR.MENSAJES
+                (ID_MENSAJE, TIPO_MENSAJE, EMISOR, RECEPTOR,
+                 ARCHIVO_ADJUNTO, TIPO_ARCHIVO, NOMBRE_ARCHIVO,
+                 ID_CHATS, CONTENIDO, FECHA)
+            VALUES (?, ?, ?, ?, 'S', ?, ?, ?, ?, SYSDATE)
+            """;
+
+        String sqlArchivo = """
+            INSERT INTO HR.ARCHIVOADJ
+                (ID_AADJ, ID_MENSAJE, TIPO, RUTA, CONTENIDO)
+            VALUES (?, ?, ?, ?, ?)
+            """;
+
+        try (Connection conexion = ConexionBD.obtenerConexion()) {
+            conexion.setAutoCommit(false);
+
+            try {
+                try (PreparedStatement ps =
+                             conexion.prepareStatement(sqlMensaje)) {
+                    ps.setString(1, idMensaje);
+                    ps.setString(2, extension);
+                    ps.setString(3, emisor);
+                    ps.setString(4, receptor);
+                    ps.setString(5, mimeType);
+                    ps.setString(6, nombreArchivo);
+                    ps.setString(7, idChat);
+
+                    if (texto.isBlank()) {
+                        ps.setNull(8, Types.CLOB);
+                    } else {
+                        ps.setCharacterStream(
+                                8,
+                                new java.io.StringReader(texto),
+                                texto.length()
+                        );
+                    }
+
+                    ps.executeUpdate();
+                }
+
+                try (PreparedStatement ps =
+                             conexion.prepareStatement(sqlArchivo)) {
+                    ps.setString(1, idArchivo);
+                    ps.setString(2, idMensaje);
+                    ps.setString(3, mimeType);
+                    ps.setNull(4, Types.VARCHAR);
+                    ps.setBinaryStream(
+                            5,
+                            new ByteArrayInputStream(contenidoArchivo),
+                            contenidoArchivo.length
+                    );
+                    ps.executeUpdate();
+                }
+
+                try (PreparedStatement ps = conexion.prepareStatement(
+                        "UPDATE HR.CHATS " +
+                                "SET FECHA_MODIFICACION = SYSDATE " +
+                                "WHERE ID_CHATS = ?")) {
+                    ps.setString(1, idChat);
+                    ps.executeUpdate();
+                }
+
+                conexion.commit();
+            } catch (SQLException | RuntimeException error) {
+                try {
+                    conexion.rollback();
+                } catch (SQLException errorRollback) {
+                    error.addSuppressed(errorRollback);
+                }
+                throw error;
+            }
+        }
     }
 
     private String buscarIdModelo() throws SQLException {

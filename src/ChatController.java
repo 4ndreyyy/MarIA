@@ -22,12 +22,29 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import com.google.genai.types.Content;
+import com.google.genai.types.Part;
+import javafx.scene.control.Label;
+import javafx.stage.FileChooser;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
+import java.nio.file.Path;
+import java.util.Locale;
+
 
 public class ChatController {
     @FXML private WebView chatView;
     @FXML private TextField questionField;
     @FXML private Button sendButton;
     @FXML private ListView<ChatDAO.ChatResumen> historyList;
+    @FXML private Label attachmentLabel;
+
+    private Path archivoSeleccionado;
+    private static final long MAX_BYTES_ARCHIVO = 10L * 1024 * 1024;
+
 
     private int versionCargaChat;
     private Client client;
@@ -100,18 +117,73 @@ public class ChatController {
         renderMessages();
     }
 
+    private String obtenerExtension(Path archivo) {
+        String nombre = archivo.getFileName()
+                .toString()
+                .toLowerCase(Locale.ROOT);
+
+        int punto = nombre.lastIndexOf('.');
+        if (punto < 0) {
+            throw new IllegalArgumentException(
+                    "El archivo debe tener una extensión."
+            );
+        }
+
+        String extension = nombre.substring(punto);
+
+        if (extension.equals(".jpeg")) {
+            return ".jpg";
+        }
+
+        if (extension.equals(".txt")
+                || extension.equals(".pdf")
+                || extension.equals(".png")
+                || extension.equals(".jpg")) {
+            return extension;
+        }
+
+        throw new IllegalArgumentException(
+                "Solo se permiten archivos TXT, PDF, PNG o JPG."
+        );
+    }
+
+    private String obtenerMimeType(Path archivo) {
+        return switch (obtenerExtension(archivo)) {
+            case ".txt" -> "text/plain";
+            case ".pdf" -> "application/pdf";
+            case ".png" -> "image/png";
+            case ".jpg" -> "image/jpeg";
+            default -> throw new IllegalArgumentException(
+                    "Tipo de archivo no compatible."
+            );
+        };
+    }
+
     @FXML
     private void sendQuestion() {
-        String question = questionField.getText().trim();
-        if (question.isEmpty() || client == null) {
+        String textoEscrito = questionField.getText().trim();
+        Path archivo = archivoSeleccionado;
+
+        if (client == null || (textoEscrito.isEmpty() && archivo == null)) {
             return;
+        }
+
+        String pregunta = textoEscrito.isEmpty()
+                ? "Analiza el archivo adjunto."
+                : textoEscrito;
+
+        String textoVisible = pregunta;
+        if (archivo != null) {
+            textoVisible += "\n\n📎 " + archivo.getFileName();
         }
 
         questionField.clear();
         questionField.setDisable(true);
         sendButton.setDisable(true);
+        archivoSeleccionado = null;
+        attachmentLabel.setText("Sin archivo adjunto");
 
-        messages.add(new ChatMessage("user", question));
+        messages.add(new ChatMessage("user", textoVisible));
         ChatMessage pendingAnswer =
                 new ChatMessage("assistant", "*Consultando Gemini…*");
         messages.add(pendingAnswer);
@@ -128,23 +200,70 @@ public class ChatController {
                 if (idChatActual == null) {
                     idChatActual = chatDAO.crearChat(
                             usuarioSesion.idUsuario(),
-                            question
+                            pregunta
                     );
                 }
 
-                chatDAO.guardarMensaje(
-                        idChatActual,
-                        "USUARIO",
-                        "IA",
-                        question
-                );
+                GenerateContentResponse response;
 
-                GenerateContentResponse response =
-                        client.models.generateContent(
-                                "gemini-3.5-flash",
-                                question,
-                                null
+                if (archivo == null) {
+                    chatDAO.guardarMensaje(
+                            idChatActual,
+                            "USUARIO",
+                            "IA",
+                            pregunta
+                    );
+
+                    response = client.models.generateContent(
+                            "gemini-3.5-flash",
+                            pregunta,
+                            null
+                    );
+                } else {
+                    byte[] bytes = Files.readAllBytes(archivo);
+                    String mimeType = obtenerMimeType(archivo);
+                    String extension = obtenerExtension(archivo);
+                    String nombreArchivo = archivo.getFileName().toString();
+
+                    chatDAO.guardarMensajeConArchivo(
+                            idChatActual,
+                            "USUARIO",
+                            "IA",
+                            pregunta,
+                            nombreArchivo,
+                            mimeType,
+                            extension,
+                            bytes
+                    );
+
+                    Content contenido;
+
+                    if (mimeType.equals("text/plain")) {
+                        String textoArchivo =
+                                new String(bytes, StandardCharsets.UTF_8);
+
+                        contenido = Content.fromParts(
+                                Part.fromText(pregunta),
+                                Part.fromText(
+                                        "Contenido del archivo "
+                                                + nombreArchivo
+                                                + ":\n"
+                                                + textoArchivo
+                                )
                         );
+                    } else {
+                        contenido = Content.fromParts(
+                                Part.fromText(pregunta),
+                                Part.fromBytes(bytes, mimeType)
+                        );
+                    }
+
+                    response = client.models.generateContent(
+                            "gemini-3.5-flash",
+                            contenido,
+                            null
+                    );
+                }
 
                 String respuesta = response.text();
 
@@ -158,14 +277,14 @@ public class ChatController {
                 }
 
                 return respuesta;
-            } catch (SQLException error) {
+
+            } catch (SQLException | IOException error) {
                 throw new CompletionException(error);
             }
         }).whenComplete((answer, error) -> Platform.runLater(() -> {
             questionField.setDisable(false);
             sendButton.setDisable(false);
             questionField.requestFocus();
-
 
             if (error != null) {
                 pendingAnswer.text =
@@ -179,9 +298,66 @@ public class ChatController {
             }
 
             renderMessages();
-            renderMessages();
             cargarConversaciones();
         }));
+    }
+
+    @FXML
+    private void adjuntarArchivo() {
+        FileChooser selector = new FileChooser();
+        selector.setTitle("Seleccionar archivo");
+
+        selector.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter(
+                        "Archivos compatibles",
+                        "*.txt", "*.pdf", "*.png", "*.jpg", "*.jpeg"
+                )
+        );
+
+        File archivo = selector.showOpenDialog(
+                questionField.getScene().getWindow()
+        );
+
+        if (archivo == null) {
+            return;
+        }
+
+        try {
+            long tamano = Files.size(archivo.toPath());
+
+            if (tamano > MAX_BYTES_ARCHIVO) {
+                mostrarAviso("El archivo supera el límite de 10 MiB.");
+                return;
+            }
+
+            if (archivo.getName().length() > 100) {
+                mostrarAviso(
+                        "El nombre del archivo debe tener 100 caracteres o menos."
+                );
+                return;
+            }
+
+            obtenerExtension(archivo.toPath());
+            archivoSeleccionado = archivo.toPath();
+            attachmentLabel.setText("📎 " + archivo.getName());
+
+        } catch (IOException | IllegalArgumentException error) {
+            mostrarAviso("No se pudo leer ese archivo: " + error.getMessage());
+        }
+    }
+
+    @FXML
+    private void quitarArchivo() {
+        archivoSeleccionado = null;
+        attachmentLabel.setText("Sin archivo adjunto");
+    }
+
+    private void mostrarAviso(String mensaje) {
+        Alert alerta = new Alert(Alert.AlertType.WARNING);
+        alerta.setTitle("Archivo adjunto");
+        alerta.setHeaderText(null);
+        alerta.setContentText(mensaje);
+        alerta.showAndWait();
     }
 
     private void renderMessages() {
@@ -263,6 +439,8 @@ public class ChatController {
     private void nuevoChat() {
         versionCargaChat++;
         idChatActual = null;
+        archivoSeleccionado = null;
+        attachmentLabel.setText("Sin archivo adjunto");
 
         historyList.getSelectionModel().clearSelection();
 

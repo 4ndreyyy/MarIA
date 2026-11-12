@@ -66,6 +66,19 @@
                 <Insets top="4.0" right="26.0" bottom="22.0" left="26.0"/>
             </padding>
 
+            <HBox spacing="10.0" alignment="CENTER_LEFT">
+                <Button text="Adjuntar archivo"
+                        onAction="#adjuntarArchivo"
+                        style="-fx-background-color: #18a6a6; -fx-text-fill: white; -fx-font-weight: bold;"/>
+
+                <Label fx:id="attachmentLabel"
+                       text="Sin archivo adjunto"
+                       style="-fx-text-fill: white;"/>
+
+                <Button text="Quitar"
+                        onAction="#quitarArchivo"/>
+            </HBox>
+
             <HBox spacing="10.0" alignment="CENTER">
                 <TextField fx:id="questionField"
                            promptText="Escribe tu pregunta…"
