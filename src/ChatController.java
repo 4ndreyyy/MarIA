@@ -33,6 +33,14 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.nio.file.Path;
 import java.util.Locale;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
+import javafx.scene.layout.VBox;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.paint.Color;
+import javafx.scene.control.ListCell;
 
 
 public class ChatController {
@@ -41,7 +49,29 @@ public class ChatController {
     @FXML private Button sendButton;
     @FXML private ListView<ChatDAO.ChatResumen> historyList;
     @FXML private Label attachmentLabel;
+    @FXML private BorderPane rootPane;
+    @FXML private VBox headerBox;
+    @FXML private VBox historyBox;
+    @FXML private VBox inputArea;
 
+    @FXML private Label appTitleLabel;
+    @FXML private Label subtitleLabel;
+    @FXML private Label historyTitleLabel;
+    @FXML private Label footerLabel;
+
+    @FXML private Button settingsButton;
+    @FXML private Button newChatButton;
+    @FXML private Button attachButton;
+    @FXML private Button removeButton;
+
+    private String idiomaActual = "Español";
+    private String temaActual = "Oscuro";
+    private String tonoIAActual = "Formal";
+
+
+    private String fondoChatActual = "#141e2a";
+    private String colorTextoChatActual = "#e8eef5";
+    private String burbujaUsuarioActual = "#20384a";
     private Path archivoSeleccionado;
     private static final long MAX_BYTES_ARCHIVO = 10L * 1024 * 1024;
 
@@ -160,10 +190,206 @@ public class ChatController {
     }
 
     @FXML
+    private void abrirPreferencias() {
+        if (usuarioSesion == null) {
+            return;
+        }
+
+        try {
+            ConfiguracionDAO dao = new ConfiguracionDAO();
+            ConfiguracionDAO.Preferencias actual =
+                    dao.obtener(usuarioSesion.idConfig());
+
+            ComboBox<String> idioma = new ComboBox<>();
+            idioma.getItems().addAll("Español", "English", "Français");
+            idioma.setValue(actual.idioma());
+
+            ComboBox<String> tema = new ComboBox<>();
+            tema.getItems().addAll("Claro", "Oscuro");
+            tema.setValue(actual.tema());
+
+            ComboBox<String> tono = new ComboBox<>();
+            tono.getItems().addAll("Formal", "Informal");
+            tono.setValue(actual.tonoIA());
+
+            VBox formulario = new VBox(
+                    8,
+                    new Label("Idioma"),
+                    idioma,
+                    new Label("Tema"),
+                    tema,
+                    new Label("Tono de Gemini"),
+                    tono
+            );
+            formulario.setStyle("-fx-padding: 16;");
+
+            ButtonType guardar = new ButtonType(
+                    "Guardar",
+                    ButtonBar.ButtonData.OK_DONE
+            );
+            ButtonType cancelar = new ButtonType(
+                    "Cancelar",
+                    ButtonBar.ButtonData.CANCEL_CLOSE
+            );
+
+            Dialog<ButtonType> dialogo = new Dialog<>();
+            dialogo.setTitle("Preferencias");
+            dialogo.initOwner(chatView.getScene().getWindow());
+            dialogo.getDialogPane().getButtonTypes().addAll(guardar, cancelar);
+            dialogo.getDialogPane().setContent(formulario);
+
+            dialogo.showAndWait().ifPresent(resultado -> {
+                if (resultado == guardar) {
+                    try {
+                        dao.actualizar(
+                                usuarioSesion.idConfig(),
+                                idioma.getValue(),
+                                tono.getValue(),
+                                tema.getValue()
+                        );
+
+                        aplicarPreferencias(
+                                idioma.getValue(),
+                                tono.getValue(),
+                                tema.getValue()
+                        );
+
+                        new Alert(
+                                Alert.AlertType.INFORMATION,
+                                "Preferencias guardadas."
+                        ).showAndWait();
+
+                    } catch (SQLException error) {
+                        new Alert(
+                                Alert.AlertType.ERROR,
+                                "No se pudieron guardar las preferencias: "
+                                        + error.getMessage()
+                        ).showAndWait();
+                    }
+                }
+            });
+
+        } catch (SQLException error) {
+            new Alert(
+                    Alert.AlertType.ERROR,
+                    "No se pudieron cargar las preferencias: "
+                            + error.getMessage()
+            ).showAndWait();
+        }
+    }
+
+    private void aplicarPreferencias(
+            String idioma,
+            String tonoIA,
+            String tema
+    ) {
+        idiomaActual = idioma;
+        tonoIAActual = tonoIA;
+        temaActual = tema;
+
+        boolean oscuro = tema.equals("Oscuro");
+
+        String fondo = oscuro ? "#101722" : "#edf3f5";
+        String fondoCabecera = oscuro ? "#162331" : "#d9eeee";
+        String fondoHistorial = oscuro ? "#172431" : "#ffffff";
+        String colorTexto = oscuro ? "#f4f7fb" : "#172431";
+        String fondoChat = oscuro ? "#141e2a" : "#f4f6f8";
+        String burbujaUsuario = oscuro ? "#20384a" : "#d9eeee";
+
+        rootPane.setStyle("-fx-background-color: " + fondo + ";");
+        headerBox.setStyle("-fx-background-color: " + fondoCabecera + ";");
+        historyBox.setStyle(
+                "-fx-background-color: " + fondoHistorial
+                        + "; -fx-padding: 12; -fx-background-radius: 10;"
+        );
+        inputArea.setStyle("-fx-background-color: " + fondo + ";");
+
+        appTitleLabel.setStyle(
+                "-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: "
+                        + colorTexto + ";"
+        );
+        subtitleLabel.setStyle("-fx-text-fill: " + colorTexto + ";");
+        historyTitleLabel.setStyle(
+                "-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: "
+                        + colorTexto + ";"
+        );
+        footerLabel.setStyle("-fx-text-fill: " + colorTexto + ";");
+        attachmentLabel.setStyle("-fx-text-fill: " + colorTexto + ";");
+
+        historyList.setCellFactory(lista -> new ListCell<>() {
+            @Override
+            protected void updateItem(ChatDAO.ChatResumen chat, boolean vacio) {
+                super.updateItem(chat, vacio);
+                setText(vacio || chat == null ? null : chat.toString());
+                setTextFill(Color.web(colorTexto));
+                setStyle("-fx-background-color: " + fondoHistorial + ";");
+            }
+        });
+
+        switch (idioma) {
+            case "English" -> {
+                subtitleLabel.setText("Your Gemini assistant • Ask anything");
+                historyTitleLabel.setText("My conversations");
+                newChatButton.setText("＋ New chat");
+                settingsButton.setText("Preferences");
+                attachButton.setText("Attach file");
+                removeButton.setText("Remove");
+                sendButton.setText("Send");
+                questionField.setPromptText("Write your question…");
+                if (archivoSeleccionado == null) {
+                    attachmentLabel.setText("No file attached");
+                }
+                footerLabel.setText(
+                        "The API key is read from the Windows environment variables."
+                );
+            }
+            case "Français" -> {
+                subtitleLabel.setText("Votre assistant Gemini • Posez une question");
+                historyTitleLabel.setText("Mes conversations");
+                newChatButton.setText("＋ Nouveau chat");
+                settingsButton.setText("Préférences");
+                attachButton.setText("Joindre un fichier");
+                removeButton.setText("Supprimer");
+                sendButton.setText("Envoyer");
+                questionField.setPromptText("Écrivez votre question…");
+                if (archivoSeleccionado == null) {
+                    attachmentLabel.setText("Aucun fichier joint");
+                }
+                footerLabel.setText(
+                        "La clé API est lue depuis les variables d’environnement Windows."
+                );
+            }
+            default -> {
+                subtitleLabel.setText(
+                        "Tu asistente con Gemini  •  Pregunta lo que quieras"
+                );
+                historyTitleLabel.setText("Mis conversaciones");
+                newChatButton.setText("＋ Nuevo chat");
+                settingsButton.setText("Preferencias");
+                attachButton.setText("Adjuntar archivo");
+                removeButton.setText("Quitar");
+                sendButton.setText("Enviar");
+                questionField.setPromptText("Escribe tu pregunta…");
+                if (archivoSeleccionado == null) {
+                    attachmentLabel.setText("Sin archivo adjunto");
+                }
+                footerLabel.setText(
+                        "La clave API se lee desde las variables de entorno de Windows."
+                );
+            }
+        }
+
+        fondoChatActual = fondoChat;
+        colorTextoChatActual = colorTexto;
+        burbujaUsuarioActual = burbujaUsuario;
+        renderMessages();
+    }
+
+
+    @FXML
     private void sendQuestion() {
         String textoEscrito = questionField.getText().trim();
         Path archivo = archivoSeleccionado;
-
         if (client == null || (textoEscrito.isEmpty() && archivo == null)) {
             return;
         }
@@ -171,6 +397,17 @@ public class ChatController {
         String pregunta = textoEscrito.isEmpty()
                 ? "Analiza el archivo adjunto."
                 : textoEscrito;
+        String instruccionTono = tonoIAActual.equals("Informal")
+                ? "Responde con un tono informal y cercano.\n\n"
+                : "Responde con un tono formal y respetuoso.\n\n";
+
+        String preguntaParaGemini = instruccionTono + pregunta;
+
+
+        if (client == null || (textoEscrito.isEmpty() && archivo == null)) {
+            return;
+        }
+
 
         String textoVisible = pregunta;
         if (archivo != null) {
@@ -188,6 +425,13 @@ public class ChatController {
                 new ChatMessage("assistant", "*Consultando Gemini…*");
         messages.add(pendingAnswer);
         renderMessages();
+
+        client.models.generateContent(
+                "gemini-3.5-flash",
+                preguntaParaGemini,
+                null
+        );
+        Part.fromText(preguntaParaGemini);
 
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -361,32 +605,53 @@ public class ChatController {
     }
 
     private void renderMessages() {
-        StringBuilder html = new StringBuilder("""
-                <!DOCTYPE html>
-                <html><head><meta charset="UTF-8"><style>
-                * { box-sizing: border-box; }
-                body { margin: 0; padding: 18px 22px 28px; background: #141e2a;
-                       color: #e8eef5; font: 15px/1.65 'Segoe UI', Arial, sans-serif; }
-                .message { margin: 0 auto 18px; max-width: 900px; }
-                .user { margin-left: auto; max-width: 82%; padding: 12px 16px;
-                        border-radius: 16px 16px 4px 16px; background: #20384a; }
-                .assistant { margin-right: auto; padding: 4px 8px 12px; }
-                .role { margin-bottom: 5px; color: #38c5bd; font-size: 12px;
-                        font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-                p { margin: 7px 0 12px; }
-                h1, h2, h3 { margin: 18px 0 8px; color: #f4f7fb; line-height: 1.3; }
-                h1 { font-size: 1.5em; } h2 { font-size: 1.3em; } h3 { font-size: 1.12em; }
-                ul, ol { padding-left: 25px; margin: 8px 0 14px; }
-                li { margin: 3px 0; }
-                strong { color: #fff; }
-                a { color: #5ed6d0; }
-                blockquote { margin: 12px 0; padding: 3px 13px; border-left: 3px solid #18a6a6; color: #b8c7d6; }
-                code { padding: 2px 5px; border-radius: 4px; background: #263545; color: #9ee7dd; font-family: Consolas, monospace; }
-                pre { overflow-x: auto; padding: 13px 15px; border-radius: 9px; background: #0d141d; }
-                pre code { padding: 0; background: transparent; color: #dce8f3; }
-                hr { border: 0; border-top: 1px solid #344252; margin: 15px 0; }
-                </style></head><body>
-                """);
+        String fondoChat = fondoChatActual;
+        String colorTextoChat = colorTextoChatActual;
+        String burbujaUsuario = burbujaUsuarioActual;
+
+        String plantillaHtml = """
+        <!DOCTYPE html>
+        <html><head><meta charset="UTF-8"><style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 18px 22px 28px;
+               background: __FONDO_CHAT__;
+               color: __COLOR_TEXTO__;
+               font: 15px/1.65 'Segoe UI', Arial, sans-serif; }
+        .message { margin: 0 auto 18px; max-width: 900px; }
+        .user { margin-left: auto; max-width: 82%; padding: 12px 16px;
+                border-radius: 16px 16px 4px 16px;
+                background: __BURBUJA_USUARIO__; }
+        .assistant { margin-right: auto; padding: 4px 8px 12px; }
+        .role { margin-bottom: 5px; color: #38c5bd; font-size: 12px;
+                font-weight: 700; letter-spacing: .04em;
+                text-transform: uppercase; }
+        p { margin: 7px 0 12px; }
+        h1, h2, h3 { margin: 18px 0 8px; color: #f4f7fb; line-height: 1.3; }
+        h1 { font-size: 1.5em; }
+        h2 { font-size: 1.3em; }
+        h3 { font-size: 1.12em; }
+        ul, ol { padding-left: 25px; margin: 8px 0 14px; }
+        li { margin: 3px 0; }
+        strong { color: #fff; }
+        a { color: #5ed6d0; }
+        blockquote { margin: 12px 0; padding: 3px 13px;
+                     border-left: 3px solid #18a6a6; color: #b8c7d6; }
+        code { padding: 2px 5px; border-radius: 4px;
+               background: #263545; color: #9ee7dd;
+               font-family: Consolas, monospace; }
+        pre { overflow-x: auto; padding: 13px 15px;
+              border-radius: 9px; background: #0d141d; }
+        pre code { padding: 0; background: transparent; color: #dce8f3; }
+        hr { border: 0; border-top: 1px solid #344252; margin: 15px 0; }
+        </style></head><body>
+        """;
+
+        StringBuilder html = new StringBuilder(
+                plantillaHtml
+                        .replace("__FONDO_CHAT__", fondoChat)
+                        .replace("__COLOR_TEXTO__", colorTextoChat)
+                        .replace("__BURBUJA_USUARIO__", burbujaUsuario)
+        );
 
         for (ChatMessage message : messages) {
             if (message.role.equals("user")) {
@@ -575,6 +840,24 @@ public class ChatController {
 
     public void setUsuarioSesion(UsuarioSesion usuarioSesion) {
         this.usuarioSesion = usuarioSesion;
+
+        try {
+            ConfiguracionDAO.Preferencias preferencias =
+                    new ConfiguracionDAO().obtener(usuarioSesion.idConfig());
+
+            aplicarPreferencias(
+                    preferencias.idioma(),
+                    preferencias.tonoIA(),
+                    preferencias.tema()
+            );
+        } catch (SQLException error) {
+            new Alert(
+                    Alert.AlertType.ERROR,
+                    "No se pudieron cargar las preferencias: "
+                            + error.getMessage()
+            ).showAndWait();
+        }
+
         cargarConversaciones();
     }
 
