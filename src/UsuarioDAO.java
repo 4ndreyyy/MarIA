@@ -92,6 +92,73 @@ public class UsuarioDAO {
         }
     }
 
+    public PerfilUsuario consultarPerfil(String idUsuario) throws SQLException {
+        String sql = """
+            SELECT USERNAME, NOMBRE, APELLIDOS, CORREO
+            FROM HR.USUARIOS
+            WHERE ID_USUARIO = ?
+            """;
+
+        try (Connection conexion = ConexionBD.obtenerConexion();
+             PreparedStatement ps = conexion.prepareStatement(sql)) {
+            ps.setString(1, idUsuario.trim());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+
+                return new PerfilUsuario(
+                        rs.getString("USERNAME").trim(),
+                        rs.getString("NOMBRE").trim(),
+                        rs.getString("APELLIDOS").trim(),
+                        rs.getString("CORREO")
+                );
+            }
+        }
+    }
+
+    public void actualizarPerfil(
+            String idUsuario,
+            String username,
+            String nombre,
+            String apellidos,
+            String correo
+    ) throws SQLException {
+        validar(username, "username");
+        validar(nombre, "nombre");
+        validar(apellidos, "apellidos");
+        validar(correo, "correo");
+
+        String sql = """
+            UPDATE HR.USUARIOS
+            SET USERNAME = ?, NOMBRE = ?, APELLIDOS = ?, CORREO = ?
+            WHERE ID_USUARIO = ?
+            """;
+
+        try (Connection conexion = ConexionBD.obtenerConexion();
+             PreparedStatement ps = conexion.prepareStatement(sql)) {
+            ps.setString(1, username.trim());
+            ps.setString(2, nombre.trim());
+            ps.setString(3, apellidos.trim());
+            ps.setString(4, correo.trim());
+            ps.setString(5, idUsuario.trim());
+
+            if (ps.executeUpdate() != 1) {
+                throw new SQLException("No se encontró el usuario para actualizar.");
+            }
+        }
+    }
+
+    public record PerfilUsuario(
+            String username,
+            String nombre,
+            String apellidos,
+            String correo
+    ) {
+    }
+
+
     private static String nuevoId() {
         return UUID.randomUUID().toString()
                 .replace("-", "")
@@ -163,6 +230,80 @@ public class UsuarioDAO {
         } finally {
             if (contrasena != null) {
                 Arrays.fill(contrasena, '\0');
+            }
+        }
+    }
+
+    public void eliminarCuenta(String idUsuario) throws SQLException {
+        String idConfig;
+
+        try (Connection conexion = ConexionBD.obtenerConexion()) {
+            conexion.setAutoCommit(false);
+
+            try {
+                // Obtener la configuración asociada a esta cuenta.
+                String sqlConfig = """
+                    SELECT ID_CONFIG
+                    FROM HR.USUARIOS
+                    WHERE ID_USUARIO = ?
+                    """;
+
+                try (PreparedStatement ps =
+                             conexion.prepareStatement(sqlConfig)) {
+                    ps.setString(1, idUsuario.trim());
+
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            throw new SQLException(
+                                    "No se encontró la cuenta del usuario."
+                            );
+                        }
+                        idConfig = rs.getString("ID_CONFIG").trim();
+                    }
+                }
+
+                // Oracle elimina en cascada los chats y datos relacionados.
+                try (PreparedStatement ps = conexion.prepareStatement(
+                        "DELETE FROM HR.USUARIOS WHERE ID_USUARIO = ?")) {
+                    ps.setString(1, idUsuario.trim());
+
+                    if (ps.executeUpdate() != 1) {
+                        throw new SQLException(
+                                "No se pudo eliminar la cuenta."
+                        );
+                    }
+                }
+
+                // Borrar la configuración solo si ya no está vinculada
+                // con ningún otro usuario.
+                int usuariosConConfig;
+                try (PreparedStatement ps = conexion.prepareStatement(
+                        "SELECT COUNT(*) FROM HR.USUARIOS WHERE ID_CONFIG = ?")) {
+                    ps.setString(1, idConfig);
+
+                    try (ResultSet rs = ps.executeQuery()) {
+                        rs.next();
+                        usuariosConConfig = rs.getInt(1);
+                    }
+                }
+
+                if (usuariosConConfig == 0) {
+                    try (PreparedStatement ps = conexion.prepareStatement(
+                            "DELETE FROM HR.CONFIGURACION WHERE ID_CONFIG = ?")) {
+                        ps.setString(1, idConfig);
+                        ps.executeUpdate();
+                    }
+                }
+
+                conexion.commit();
+
+            } catch (SQLException | RuntimeException error) {
+                try {
+                    conexion.rollback();
+                } catch (SQLException errorRollback) {
+                    error.addSuppressed(errorRollback);
+                }
+                throw error;
             }
         }
     }

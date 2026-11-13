@@ -48,7 +48,7 @@ public final class ChatDAO {
         return idChat;
     }
 
-    public void guardarMensaje(
+    public String guardarMensaje(
             String idChat,
             String emisor,
             String receptor,
@@ -58,16 +58,18 @@ public final class ChatDAO {
             contenido = "";
         }
 
+        String idMensaje = nuevoId();
+
         String sql = """
-                INSERT INTO HR.MENSAJES
-                    (ID_MENSAJE, TIPO_MENSAJE, EMISOR, RECEPTOR,
-                     ARCHIVO_ADJUNTO, ID_CHATS, CONTENIDO, FECHA)
-                VALUES (?, '.txt', ?, ?, 'N', ?, ?, SYSDATE)
-                """;
+            INSERT INTO HR.MENSAJES
+                (ID_MENSAJE, TIPO_MENSAJE, EMISOR, RECEPTOR,
+                 ARCHIVO_ADJUNTO, ID_CHATS, CONTENIDO, FECHA)
+            VALUES (?, '.txt', ?, ?, 'N', ?, ?, SYSDATE)
+            """;
 
         try (Connection conexion = ConexionBD.obtenerConexion();
              PreparedStatement ps = conexion.prepareStatement(sql)) {
-            ps.setString(1, nuevoId());
+            ps.setString(1, idMensaje);
             ps.setString(2, emisor);
             ps.setString(3, receptor);
             ps.setString(4, idChat);
@@ -78,15 +80,15 @@ public final class ChatDAO {
             );
             ps.executeUpdate();
 
-            try (PreparedStatement actualizar =
-                         conexion.prepareStatement(
-                                 "UPDATE HR.CHATS " +
-                                         "SET FECHA_MODIFICACION = SYSDATE " +
-                                         "WHERE ID_CHATS = ?")) {
+            try (PreparedStatement actualizar = conexion.prepareStatement(
+                    "UPDATE HR.CHATS " +
+                            "SET FECHA_MODIFICACION = SYSDATE WHERE ID_CHATS = ?")) {
                 actualizar.setString(1, idChat);
                 actualizar.executeUpdate();
             }
         }
+
+        return idMensaje;
     }
 
     /** Devuelve los chats que pertenecen al usuario, del más reciente al más antiguo. */
@@ -164,7 +166,7 @@ public final class ChatDAO {
         return mensajes;
     }
 
-    public void guardarMensajeConArchivo(
+    public String guardarMensajeConArchivo(
             String idChat,
             String emisor,
             String receptor,
@@ -264,7 +266,59 @@ public final class ChatDAO {
                 throw error;
             }
         }
+        return idMensaje;
     }
+
+    public void guardarEspecialidad(
+            String idChat,
+            String idUsuario,
+            String tema,
+            String idMensaje
+    ) throws SQLException {
+        String sql = """
+            INSERT INTO HR.ESPECIALIDAD
+                (ID_ESPECIALIDAD, ID_CHATS, ID_USUARIO,
+                 TEMA_CONVERSACION, FECHA, ID_MENSAJE)
+            VALUES (?, ?, ?, ?, SYSDATE, ?)
+            """;
+
+        try (Connection conexion = ConexionBD.obtenerConexion();
+             PreparedStatement ps = conexion.prepareStatement(sql)) {
+            ps.setString(1, nuevoId());
+            ps.setString(2, idChat.trim());
+            ps.setString(3, idUsuario.trim());
+            ps.setString(4, tema);
+            ps.setString(5, idMensaje.trim());
+            ps.executeUpdate();
+        }
+    }
+
+    public String obtenerEspecialidad(
+            String idChat,
+            String idUsuario
+    ) throws SQLException {
+        String sql = """
+            SELECT TEMA_CONVERSACION
+            FROM HR.ESPECIALIDAD
+            WHERE ID_CHATS = ?
+              AND ID_USUARIO = ?
+            ORDER BY FECHA DESC
+            FETCH FIRST 1 ROW ONLY
+            """;
+
+        try (Connection conexion = ConexionBD.obtenerConexion();
+             PreparedStatement ps = conexion.prepareStatement(sql)) {
+            ps.setString(1, idChat.trim());
+            ps.setString(2, idUsuario.trim());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next()
+                        ? rs.getString("TEMA_CONVERSACION").trim()
+                        : null;
+            }
+        }
+    }
+
 
     private String buscarIdModelo() throws SQLException {
         String sql =

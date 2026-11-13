@@ -13,6 +13,8 @@
       spacing="12"
       prefWidth="380"
       style="-fx-background-color: #101722;">
+
+
     <padding>
         <Insets top="24" right="28" bottom="24" left="28"/>
     </padding>

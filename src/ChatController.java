@@ -41,6 +41,12 @@ import javafx.scene.layout.VBox;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.paint.Color;
 import javafx.scene.control.ListCell;
+import com.google.genai.types.GenerateContentConfig;
+import com.google.genai.types.Tool;
+import java.lang.reflect.Method;
+
+
+
 
 
 public class ChatController {
@@ -59,6 +65,7 @@ public class ChatController {
     @FXML private Label historyTitleLabel;
     @FXML private Label footerLabel;
 
+    @FXML private ComboBox<String> specialtyCombo;
     @FXML private Button settingsButton;
     @FXML private Button newChatButton;
     @FXML private Button attachButton;
@@ -92,6 +99,9 @@ public class ChatController {
 
     @FXML
     private void initialize() {
+        specialtyCombo.getItems().setAll("General", "Turismo");
+        specialtyCombo.setValue("General");
+
         historyList.getSelectionModel()
                 .selectedItemProperty()
                 .addListener((observable, anterior, seleccion) -> {
@@ -237,6 +247,13 @@ public class ChatController {
             dialogo.initOwner(chatView.getScene().getWindow());
             dialogo.getDialogPane().getButtonTypes().addAll(guardar, cancelar);
             dialogo.getDialogPane().setContent(formulario);
+            Button borrarCuenta = new Button("Eliminar mi cuenta");
+            borrarCuenta.setStyle("-fx-text-fill: #b00020;");
+            borrarCuenta.setOnAction(evento -> {
+                dialogo.close();
+                eliminarCuenta();
+            });
+            formulario.getChildren().add(borrarCuenta);
 
             dialogo.showAndWait().ifPresent(resultado -> {
                 if (resultado == guardar) {
@@ -385,11 +402,60 @@ public class ChatController {
         renderMessages();
     }
 
+    @FXML
+    private void eliminarCuenta() {
+        if (usuarioSesion == null) {
+            return;
+        }
+
+        ButtonType confirmar = new ButtonType(
+                "Sí, eliminar mi cuenta",
+                ButtonBar.ButtonData.OK_DONE
+        );
+
+        Alert confirmacion = new Alert(Alert.AlertType.CONFIRMATION);
+        confirmacion.setTitle("Eliminar cuenta");
+        confirmacion.setHeaderText(
+                "¿Eliminar la cuenta de " + usuarioSesion.username() + "?"
+        );
+        confirmacion.setContentText(
+                "Se eliminarán también sus chats, mensajes y archivos. "
+                        + "Esta acción no se puede deshacer."
+        );
+        confirmacion.getButtonTypes().setAll(confirmar, ButtonType.CANCEL);
+
+        if (confirmacion.showAndWait().orElse(ButtonType.CANCEL) != confirmar) {
+            return;
+        }
+
+        try {
+            new UsuarioDAO().eliminarCuenta(usuarioSesion.idUsuario());
+
+            Alert exito = new Alert(Alert.AlertType.INFORMATION);
+            exito.setTitle("Cuenta eliminada");
+            exito.setHeaderText(null);
+            exito.setContentText(
+                    "La cuenta y sus datos asociados fueron eliminados. "
+                            + "La aplicación se cerrará."
+            );
+            exito.showAndWait();
+
+            Platform.exit();
+
+        } catch (SQLException error) {
+            Alert alerta = new Alert(Alert.AlertType.ERROR);
+            alerta.setTitle("No se pudo eliminar la cuenta");
+            alerta.setHeaderText(null);
+            alerta.setContentText(error.getMessage());
+            alerta.showAndWait();
+        }
+    }
 
     @FXML
     private void sendQuestion() {
         String textoEscrito = questionField.getText().trim();
         Path archivo = archivoSeleccionado;
+
         if (client == null || (textoEscrito.isEmpty() && archivo == null)) {
             return;
         }
@@ -397,17 +463,37 @@ public class ChatController {
         String pregunta = textoEscrito.isEmpty()
                 ? "Analiza el archivo adjunto."
                 : textoEscrito;
+
+        boolean modoTurismo =
+                "Turismo".equals(specialtyCombo.getValue());
+
         String instruccionTono = tonoIAActual.equals("Informal")
                 ? "Responde con un tono informal y cercano.\n\n"
                 : "Responde con un tono formal y respetuoso.\n\n";
 
-        String preguntaParaGemini = instruccionTono + pregunta;
+        String instruccionTurismo = modoTurismo
+                ? "Eres MarIA, una asistente especializada en turismo. "
+                  + "Ayuda con destinos, itinerarios, transporte, alojamiento "
+                  + "y cultura. Si un dato puede cambiar, como precios, horarios "
+                  + "o requisitos, aclara que debe verificarse en fuentes oficiales "
+                  + "y no inventes datos.\n\n"
+                : "";
 
+        String instruccionesPerfil =
+                "\n\nPuedes consultar el perfil del usuario activo con consultarMiPerfil. "
+                        + "Para cambiar username, nombre, apellidos o correo, llama "
+                        + "prepararCambioPerfil solo si el usuario lo pide explícitamente. "
+                        + "No afirmes que el cambio se guardó: la aplicación solicitará "
+                        + "confirmación. Nunca solicites ni muestres contraseñas.";
 
-        if (client == null || (textoEscrito.isEmpty() && archivo == null)) {
-            return;
-        }
+        // Esta variable se asigna una sola vez porque se usa dentro de supplyAsync.
+        String preguntaParaGemini =
+                instruccionTono
+                        + instruccionTurismo
+                        + pregunta
+                        + instruccionesPerfil;
 
+        UsuarioHerramientas.limpiarCambioPendiente();
 
         String textoVisible = pregunta;
         if (archivo != null) {
@@ -421,17 +507,11 @@ public class ChatController {
         attachmentLabel.setText("Sin archivo adjunto");
 
         messages.add(new ChatMessage("user", textoVisible));
+
         ChatMessage pendingAnswer =
                 new ChatMessage("assistant", "*Consultando Gemini…*");
         messages.add(pendingAnswer);
         renderMessages();
-
-        client.models.generateContent(
-                "gemini-3.5-flash",
-                preguntaParaGemini,
-                null
-        );
-        Part.fromText(preguntaParaGemini);
 
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -448,28 +528,26 @@ public class ChatController {
                     );
                 }
 
-                GenerateContentResponse response;
+                String idMensajeUsuario;
+                byte[] bytes = null;
+                String mimeType = null;
+                String extension = null;
+                String nombreArchivo = null;
 
                 if (archivo == null) {
-                    chatDAO.guardarMensaje(
+                    idMensajeUsuario = chatDAO.guardarMensaje(
                             idChatActual,
                             "USUARIO",
                             "IA",
                             pregunta
                     );
-
-                    response = client.models.generateContent(
-                            "gemini-3.5-flash-lite",
-                            pregunta,
-                            null
-                    );
                 } else {
-                    byte[] bytes = Files.readAllBytes(archivo);
-                    String mimeType = obtenerMimeType(archivo);
-                    String extension = obtenerExtension(archivo);
-                    String nombreArchivo = archivo.getFileName().toString();
+                    bytes = Files.readAllBytes(archivo);
+                    mimeType = obtenerMimeType(archivo);
+                    extension = obtenerExtension(archivo);
+                    nombreArchivo = archivo.getFileName().toString();
 
-                    chatDAO.guardarMensajeConArchivo(
+                    idMensajeUsuario = chatDAO.guardarMensajeConArchivo(
                             idChatActual,
                             "USUARIO",
                             "IA",
@@ -479,15 +557,34 @@ public class ChatController {
                             extension,
                             bytes
                     );
+                }
 
+                if (modoTurismo) {
+                    chatDAO.guardarEspecialidad(
+                            idChatActual,
+                            usuarioSesion.idUsuario(),
+                            "Turismo",
+                            idMensajeUsuario
+                    );
+                }
+
+                GenerateContentResponse response;
+
+                if (archivo == null) {
+                    response = client.models.generateContent(
+                            "gemini-3.5-flash-lite",
+                            preguntaParaGemini,
+                            crearConfigPerfil()
+                    );
+                } else {
                     Content contenido;
 
-                    if (mimeType.equals("text/plain")) {
+                    if ("text/plain".equals(mimeType)) {
                         String textoArchivo =
                                 new String(bytes, StandardCharsets.UTF_8);
 
                         contenido = Content.fromParts(
-                                Part.fromText(pregunta),
+                                Part.fromText(preguntaParaGemini),
                                 Part.fromText(
                                         "Contenido del archivo "
                                                 + nombreArchivo
@@ -497,7 +594,7 @@ public class ChatController {
                         );
                     } else {
                         contenido = Content.fromParts(
-                                Part.fromText(pregunta),
+                                Part.fromText(preguntaParaGemini),
                                 Part.fromBytes(bytes, mimeType)
                         );
                     }
@@ -541,10 +638,112 @@ public class ChatController {
                                 : answer;
             }
 
+            UsuarioHerramientas.CambioPerfil cambio =
+                    UsuarioHerramientas.tomarCambioPendiente();
+
+            if (cambio != null) {
+                confirmarCambioPerfil(cambio, pendingAnswer);
+            }
+
             renderMessages();
             cargarConversaciones();
         }));
     }
+
+    private GenerateContentConfig crearConfigPerfil() {
+        try {
+            Method consultar = UsuarioHerramientas.class.getMethod(
+                    "consultarMiPerfil"
+            );
+            Method prepararCambio = UsuarioHerramientas.class.getMethod(
+                    "prepararCambioPerfil",
+                    String.class,
+                    String.class
+            );
+
+            return GenerateContentConfig.builder()
+                    .tools(Tool.builder().functions(consultar, prepararCambio))
+                    .build();
+
+        } catch (NoSuchMethodException error) {
+            throw new IllegalStateException(
+                    "No se pudieron configurar las funciones de perfil.",
+                    error
+            );
+        }
+    }
+
+    private void confirmarCambioPerfil(
+            UsuarioHerramientas.CambioPerfil cambio,
+            ChatMessage respuestaVisible
+    ) {
+        ButtonType confirmar = new ButtonType(
+                "Guardar cambio",
+                ButtonBar.ButtonData.OK_DONE
+        );
+
+        Alert alerta = new Alert(Alert.AlertType.CONFIRMATION);
+        alerta.setTitle("Confirmar cambio de perfil");
+        alerta.setHeaderText("¿Quieres guardar este cambio?");
+        alerta.setContentText(
+                cambio.campo() + ": "
+                        + cambio.valorAnterior()
+                        + " → "
+                        + cambio.valorNuevo()
+        );
+        alerta.getButtonTypes().setAll(confirmar, ButtonType.CANCEL);
+
+        String resultado;
+
+        if (alerta.showAndWait().orElse(ButtonType.CANCEL) == confirmar) {
+            try {
+                UsuarioDAO.PerfilUsuario perfil = cambio.perfilNuevo();
+
+                new UsuarioDAO().actualizarPerfil(
+                        usuarioSesion.idUsuario(),
+                        perfil.username(),
+                        perfil.nombre(),
+                        perfil.apellidos(),
+                        perfil.correo()
+                );
+
+                usuarioSesion = new UsuarioSesion(
+                        usuarioSesion.idUsuario(),
+                        perfil.username(),
+                        usuarioSesion.idConfig(),
+                        usuarioSesion.idTipos()
+                );
+
+                resultado = "Perfil actualizado correctamente.";
+
+            } catch (SQLException error) {
+                resultado = "No se pudo actualizar el perfil: "
+                        + rootMessage(error);
+            }
+        } else {
+            resultado = "Cambio cancelado. No se modificó el perfil.";
+        }
+
+        respuestaVisible.text = resultado;
+        messages.add(new ChatMessage("assistant", resultado));
+        renderMessages();
+
+        try {
+            chatDAO.guardarMensaje(
+                    idChatActual,
+                    "GEMINI",
+                    "US",
+                    resultado
+            );
+        } catch (SQLException error) {
+            new Alert(
+                    Alert.AlertType.WARNING,
+                    "El resultado se mostró, pero no se pudo guardar en el chat: "
+                            + error.getMessage()
+            ).showAndWait();
+        }
+    }
+
 
     @FXML
     private void adjuntarArchivo() {
@@ -706,7 +905,8 @@ public class ChatController {
         idChatActual = null;
         archivoSeleccionado = null;
         attachmentLabel.setText("Sin archivo adjunto");
-
+        specialtyCombo.setDisable(false);
+        specialtyCombo.setValue("General");
         historyList.getSelectionModel().clearSelection();
 
         questionField.setDisable(false);
@@ -768,48 +968,70 @@ public class ChatController {
 
         questionField.setDisable(true);
         sendButton.setDisable(true);
+        specialtyCombo.setDisable(true);
 
         CompletableFuture.supplyAsync(() -> {
             try {
-                return chatDAO.listarMensajes(chat.idChat(), idUsuario);
+                List<ChatDAO.MensajeGuardado> mensajesGuardados =
+                        chatDAO.listarMensajes(chat.idChat(), idUsuario);
+
+                String tema = chatDAO.obtenerEspecialidad(
+                        chat.idChat(),
+                        idUsuario
+                );
+
+                return new DatosChat(mensajesGuardados, tema);
             } catch (SQLException error) {
                 throw new CompletionException(error);
             }
-        }).whenComplete((mensajesGuardados, error) ->
-                Platform.runLater(() -> {
-                    if (version != versionCargaChat) {
-                        return;
-                    }
+        }).whenComplete((datos, error) -> Platform.runLater(() -> {
+            if (version != versionCargaChat) {
+                return;
+            }
 
-                    questionField.setDisable(false);
-                    sendButton.setDisable(false);
+            questionField.setDisable(false);
+            sendButton.setDisable(false);
 
-                    if (error != null) {
-                        messages.add(new ChatMessage(
-                                "assistant",
-                                "No se pudo abrir esta conversación: "
-                                        + rootMessage(error)
-                        ));
-                        renderMessages();
-                        return;
-                    }
+            if (error != null) {
+                specialtyCombo.setDisable(false);
+                messages.add(new ChatMessage(
+                        "assistant",
+                        "No se pudo abrir esta conversación: "
+                                + rootMessage(error)
+                ));
+                renderMessages();
+                return;
+            }
 
-                    idChatActual = chat.idChat();
-                    messages.clear();
+            idChatActual = chat.idChat();
 
-                    for (ChatDAO.MensajeGuardado mensaje : mensajesGuardados) {
-                        boolean esUsuario =
-                                mensaje.emisor().equalsIgnoreCase("USUARIO");
+            specialtyCombo.setValue(
+                    "Turismo".equalsIgnoreCase(datos.tema())
+                            ? "Turismo"
+                            : "General"
+            );
+            specialtyCombo.setDisable(true);
 
-                        messages.add(new ChatMessage(
-                                esUsuario ? "user" : "assistant",
-                                mensaje.contenido()
-                        ));
-                    }
+            messages.clear();
 
-                    renderMessages();
-                })
-        );
+            for (ChatDAO.MensajeGuardado mensaje : datos.mensajes()) {
+                boolean esUsuario =
+                        mensaje.emisor().equalsIgnoreCase("USUARIO");
+
+                messages.add(new ChatMessage(
+                        esUsuario ? "user" : "assistant",
+                        mensaje.contenido()
+                ));
+            }
+
+            renderMessages();
+        }));
+    }
+
+    private record DatosChat(
+            List<ChatDAO.MensajeGuardado> mensajes,
+            String tema
+    ) {
     }
 
     @FXML
@@ -840,6 +1062,7 @@ public class ChatController {
 
     public void setUsuarioSesion(UsuarioSesion usuarioSesion) {
         this.usuarioSesion = usuarioSesion;
+        UsuarioHerramientas.establecerUsuarioActual(usuarioSesion.idUsuario());
 
         try {
             ConfiguracionDAO.Preferencias preferencias =
