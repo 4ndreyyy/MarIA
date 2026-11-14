@@ -54,6 +54,14 @@ import javafx.scene.control.ListCell;
 import javafx.scene.Node;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
+import netscape.javascript.JSObject;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.Clip;
+import java.util.concurrent.atomic.AtomicReference;
+
+
+
 
 
 public class ChatController {
@@ -61,6 +69,8 @@ public class ChatController {
     private WebView chatView;
     @FXML
     private TextField questionField;
+    @FXML
+    private Button microphoneButton;
     @FXML
     private Button sendButton;
     @FXML
@@ -131,6 +141,10 @@ public class ChatController {
     private String idChatActual;
     private UsuarioSesion usuarioSesion;
 
+
+    private final AudioRecorder audioRecorder = new AudioRecorder();
+    private final AtomicReference<Clip> activeAudioClip =
+            new AtomicReference<>();
     private final List<ChatMessage> messages = new ArrayList<>();
     private final Parser markdownParser = Parser.builder().build();
     private final HtmlRenderer markdownRenderer =
@@ -170,6 +184,10 @@ public class ChatController {
                         chatView.getEngine().executeScript(
                                 "window.scrollTo(0, document.body.scrollHeight);"
                         );
+                        JSObject window = (JSObject) chatView.getEngine()
+                                .executeScript("window");
+
+                        window.setMember("mariaAudio", new AudioBridge());
                     }
                 }
         );
@@ -195,6 +213,7 @@ public class ChatController {
         client = Client.builder()
                 .apiKey(apiKey)
                 .httpOptions(HttpOptions.builder()
+                        .apiVersion("v1beta")
                         .timeout(120_000)
                         .retryOptions(HttpRetryOptions.builder()
                                 .attempts(3)
@@ -780,7 +799,7 @@ public class ChatController {
         if (archivo != null) {
             textoVisible += "\n\n📎 " + archivo.getFileName();
         }
-
+        microphoneButton.setDisable(true);
         questionField.clear();
         questionField.setDisable(true);
         sendButton.setDisable(true);
@@ -907,6 +926,7 @@ public class ChatController {
             questionField.setDisable(false);
             sendButton.setDisable(false);
             questionField.requestFocus();
+            microphoneButton.setDisable(true);
 
             if (error != null) {
                 pendingAnswer.text =
@@ -929,6 +949,178 @@ public class ChatController {
             renderMessages();
             cargarConversaciones();
         }));
+    }
+
+    @FXML
+    private void toggleRecording() {
+        if (client == null) {
+            return;
+        }
+
+        if (!audioRecorder.isRecording()) {
+            try {
+                audioRecorder.start();
+                microphoneButton.setText("⏹ Detener grabación");
+                microphoneButton.getStyleClass().add("recording-button");
+            } catch (Exception error) {
+                mostrarAviso(
+                        "No se pudo iniciar el micrófono: " +
+                                error.getMessage()
+                );
+            }
+            return;
+        }
+
+        Path wav;
+
+        try {
+            wav = audioRecorder.stopToWav();
+        } catch (Exception error) {
+            resetMicrophoneButton();
+            mostrarAviso(
+                    "No se pudo guardar la grabación: " +
+                            error.getMessage()
+            );
+            return;
+        }
+
+        microphoneButton.setDisable(true);
+        microphoneButton.setText("Transcribiendo…");
+        questionField.setDisable(true);
+
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return GeminiAudioService.transcribe(client, wav);
+            } catch (Exception error) {
+                throw new CompletionException(error);
+            } finally {
+                try {
+                    Files.deleteIfExists(wav);
+                } catch (IOException ignored) {
+                }
+            }
+        }).whenComplete((transcript, error) ->
+                Platform.runLater(() -> {
+                    questionField.setDisable(false);
+                    microphoneButton.setDisable(false);
+                    resetMicrophoneButton();
+
+                    if (error != null) {
+                        mostrarAviso(
+                                "No se pudo transcribir el audio: " +
+                                        rootMessage(error)
+                        );
+                        return;
+                    }
+
+                    if (transcript == null || transcript.isBlank()) {
+                        mostrarAviso(
+                                "No se detectó voz. Intenta grabar de nuevo."
+                        );
+                        return;
+                    }
+
+                    String anterior = questionField.getText().trim();
+
+                    questionField.setText(anterior.isEmpty()
+                            ? transcript
+                            : anterior + " " + transcript);
+
+                    questionField.positionCaret(
+                            questionField.getText().length()
+                    );
+                    questionField.requestFocus();
+                })
+        );
+    }
+
+    private void resetMicrophoneButton() {
+        microphoneButton.setText(switch (idiomaActual) {
+            case "English" -> "🎙 Dictate";
+            case "Français" -> "🎙 Dicter";
+            default -> "🎙 Dictar";
+        });
+
+        microphoneButton.getStyleClass().remove("recording-button");
+    }
+
+    /** El WebView llama este método cuando pulsan la bocina. */
+    public final class AudioBridge {
+        public void play(int messageIndex) {
+            if (messageIndex < 0 || messageIndex >= messages.size()) {
+                return;
+            }
+
+            ChatMessage message = messages.get(messageIndex);
+
+            if (!"assistant".equals(message.role)
+                    || message.text == null
+                    || message.text.isBlank()
+                    || message.text.startsWith("*Consultando Gemini")) {
+                return;
+            }
+
+            CompletableFuture.runAsync(() -> {
+                try {
+                    Path wav = message.audioFile;
+
+                    if (wav == null || !Files.exists(wav)) {
+                        byte[] audio = GeminiAudioService.synthesize(
+                                client,
+                                message.text,
+                                idiomaActual
+                        );
+
+                        wav = Files.createTempFile(
+                                "maria-respuesta-",
+                                ".wav"
+                        );
+
+                        wav.toFile().deleteOnExit();
+                        Files.write(wav, audio);
+                        message.audioFile = wav;
+                    }
+
+                    reproducirAudio(wav);
+                } catch (Exception error) {
+                    Platform.runLater(() ->
+                            mostrarAviso(
+                                    "No se pudo reproducir la respuesta: " +
+                                            error.getMessage()
+                            )
+                    );
+                }
+            });
+        }
+    }
+
+    private synchronized void reproducirAudio(Path wav)
+            throws Exception {
+
+        Clip anterior = activeAudioClip.getAndSet(null);
+
+        if (anterior != null) {
+            anterior.stop();
+            anterior.close();
+        }
+
+        Clip clip = AudioSystem.getClip();
+
+        try (AudioInputStream input =
+                     AudioSystem.getAudioInputStream(wav.toFile())) {
+            clip.open(input);
+        }
+
+        clip.addLineListener(event -> {
+            if (event.getType()
+                    == javax.sound.sampled.LineEvent.Type.STOP) {
+                clip.close();
+                activeAudioClip.compareAndSet(clip, null);
+            }
+        });
+
+        activeAudioClip.set(clip);
+        clip.start();
     }
 
     private GenerateContentConfig crearConfigPerfil() {
@@ -1108,218 +1300,242 @@ public class ChatController {
                 : "#e9f0f1";
 
         String plantillaHtml = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-        * { box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+            * { box-sizing: border-box; }
+            html { scroll-behavior: smooth; }
 
-        body {
-            margin: 0;
-            min-height: 100vh;
-            padding: 28px 30px 38px;
-            background: __FONDO_CHAT__;
-            color: __COLOR_TEXTO__;
-            font: 15px/1.7 'Segoe UI', Arial, sans-serif;
-        }
-
-        .conversation {
-            width: min(100%, 940px);
-            margin: 0 auto;
-        }
-
-        .message {
-            width: fit-content;
-            max-width: 100%;
-            margin: 0 0 28px;
-            animation: message-appear .3s ease-out both;
-        }
-
-        .message.user {
-            max-width: min(78%, 690px);
-            margin-left: auto;
-            padding: 14px 18px 15px;
-            border: 1px solid rgba(130,170,190,.14);
-            border-radius: 20px 20px 5px 20px;
-            background: __BURBUJA_USUARIO__;
-        }
-
-        .user .role {
-            margin-bottom: 4px;
-            color: __ACENTO__;
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: .13em;
-            text-transform: uppercase;
-        }
-
-        .assistant {
-            display: flex;
-            align-items: flex-start;
-            gap: 13px;
-            width: 100%;
-            padding: 2px 0 3px;
-        }
-
-        .avatar {
-            display: grid;
-            flex: 0 0 34px;
-            width: 34px;
-            height: 34px;
-            place-items: center;
-            border-radius: 12px;
-            background: linear-gradient(145deg, __ACENTO__, #168f9b);
-            color: #092027;
-            font-size: 17px;
-            font-weight: 800;
-        }
-
-        .assistant-body {
-            min-width: 0;
-            flex: 1;
-            padding-top: 2px;
-        }
-
-        .message-meta {
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            min-height: 25px;
-            margin-bottom: 7px;
-        }
-
-        .role {
-            color: __ACENTO__;
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: .12em;
-            text-transform: uppercase;
-        }
-
-        .engine {
-            color: #899bac;
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: .1em;
-        }
-
-        .specialty-badge {
-            padding: 3px 8px;
-            border: 1px solid rgba(242,161,118,.28);
-            border-radius: 20px;
-            background: rgba(242,161,118,.10);
-            color: #f2a176;
-            font-size: 9px;
-            font-weight: 800;
-            letter-spacing: .06em;
-        }
-
-        .content { overflow-wrap: anywhere; }
-        p { margin: 6px 0 13px; }
-
-        h1, h2, h3 {
-            margin: 21px 0 9px;
-            color: __COLOR_TEXTO__;
-            line-height: 1.3;
-        }
-
-        h1 { font-size: 1.55em; }
-        h2 { font-size: 1.3em; }
-        h3 { font-size: 1.12em; }
-
-        ul, ol { padding-left: 25px; margin: 8px 0 14px; }
-        li { margin: 4px 0; padding-left: 2px; }
-        strong { color: __COLOR_TEXTO__; }
-        a { color: __ACENTO__; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-
-        blockquote {
-            margin: 13px 0;
-            padding: 4px 14px;
-            border-left: 3px solid __ACENTO__;
-            color: #aebfcb;
-        }
-
-        code {
-            padding: 2px 6px;
-            border-radius: 6px;
-            background: __FONDO_CODIGO__;
-            color: __ACENTO__;
-            font-family: Consolas, monospace;
-            font-size: .92em;
-        }
-
-        pre {
-            overflow-x: auto;
-            margin: 12px 0;
-            padding: 15px 17px;
-            border: 1px solid rgba(135,160,180,.16);
-            border-radius: 13px;
-            background: __FONDO_CODIGO__;
-        }
-
-        pre code {
-            padding: 0;
-            background: transparent;
-            color: __COLOR_TEXTO__;
-        }
-
-        hr {
-            height: 1px;
-            border: 0;
-            background: rgba(135,160,180,.22);
-            margin: 18px 0;
-        }
-
-        .typing {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            min-height: 24px;
-            color: #91a3b5;
-            font-size: 13px;
-        }
-
-        .typing-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: __ACENTO__;
-            animation: dot-pulse 1.1s infinite ease-in-out;
-        }
-
-        .typing-dot:nth-child(2) { animation-delay: .14s; }
-        .typing-dot:nth-child(3) { animation-delay: .28s; margin-right: 5px; }
-
-        @keyframes message-appear {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes dot-pulse {
-            0%, 60%, 100% { opacity: .35; transform: translateY(0); }
-            30% { opacity: 1; transform: translateY(-4px); }
-        }
-
-        @media (max-width: 650px) {
-            body { padding: 20px 16px 28px; }
-            .message.user { max-width: 92%; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after {
-                animation-duration: .01ms !important;
-                scroll-behavior: auto !important;
+            body {
+                margin: 0;
+                min-height: 100vh;
+                padding: 28px 30px 38px;
+                background: __FONDO_CHAT__;
+                color: __COLOR_TEXTO__;
+                font: 15px/1.7 'Segoe UI', Arial, sans-serif;
             }
-        }
-        </style>
-    </head>
-    <body>
-        <main class="conversation">
-    """;
+
+            .conversation {
+                width: min(100%, 940px);
+                margin: 0 auto;
+            }
+
+            .message {
+                width: fit-content;
+                max-width: 100%;
+                margin: 0 0 28px;
+                animation: message-appear .3s ease-out both;
+            }
+
+            .message.user {
+                max-width: min(78%, 690px);
+                margin-left: auto;
+                padding: 14px 18px 15px;
+                border: 1px solid rgba(130,170,190,.14);
+                border-radius: 20px 20px 5px 20px;
+                background: __BURBUJA_USUARIO__;
+            }
+
+            .user .role {
+                margin-bottom: 4px;
+                color: __ACENTO__;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: .13em;
+                text-transform: uppercase;
+            }
+
+            .assistant {
+                display: flex;
+                align-items: flex-start;
+                gap: 13px;
+                width: 100%;
+                padding: 2px 0 3px;
+            }
+
+            .avatar {
+                display: grid;
+                flex: 0 0 34px;
+                width: 34px;
+                height: 34px;
+                place-items: center;
+                border-radius: 12px;
+                background: linear-gradient(145deg, __ACENTO__, #168f9b);
+                color: #092027;
+                font-size: 17px;
+                font-weight: 800;
+            }
+
+            .assistant-body {
+                min-width: 0;
+                flex: 1;
+                padding-top: 2px;
+            }
+
+            .message-meta {
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                min-height: 25px;
+                margin-bottom: 7px;
+            }
+
+            .role {
+                color: __ACENTO__;
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: .12em;
+                text-transform: uppercase;
+            }
+
+            .engine {
+                color: #899bac;
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: .1em;
+            }
+
+            .specialty-badge {
+                padding: 3px 8px;
+                border: 1px solid rgba(242,161,118,.28);
+                border-radius: 20px;
+                background: rgba(242,161,118,.10);
+                color: #f2a176;
+                font-size: 9px;
+                font-weight: 800;
+                letter-spacing: .06em;
+            }
+
+            .content { overflow-wrap: anywhere; }
+            p { margin: 6px 0 13px; }
+
+            h1, h2, h3 {
+                margin: 21px 0 9px;
+                color: __COLOR_TEXTO__;
+                line-height: 1.3;
+            }
+
+            h1 { font-size: 1.55em; }
+            h2 { font-size: 1.3em; }
+            h3 { font-size: 1.12em; }
+
+            ul, ol { padding-left: 25px; margin: 8px 0 14px; }
+            li { margin: 4px 0; padding-left: 2px; }
+            strong { color: __COLOR_TEXTO__; }
+            a { color: __ACENTO__; text-decoration: none; }
+            a:hover { text-decoration: underline; }
+
+            blockquote {
+                margin: 13px 0;
+                padding: 4px 14px;
+                border-left: 3px solid __ACENTO__;
+                color: #aebfcb;
+            }
+
+            code {
+                padding: 2px 6px;
+                border-radius: 6px;
+                background: __FONDO_CODIGO__;
+                color: __ACENTO__;
+                font-family: Consolas, monospace;
+                font-size: .92em;
+            }
+
+            pre {
+                overflow-x: auto;
+                margin: 12px 0;
+                padding: 15px 17px;
+                border: 1px solid rgba(135,160,180,.16);
+                border-radius: 13px;
+                background: __FONDO_CODIGO__;
+            }
+
+            pre code {
+                padding: 0;
+                background: transparent;
+                color: __COLOR_TEXTO__;
+            }
+
+            hr {
+                height: 1px;
+                border: 0;
+                background: rgba(135,160,180,.22);
+                margin: 18px 0;
+            }
+
+            .typing {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                min-height: 24px;
+                color: #91a3b5;
+                font-size: 13px;
+            }
+
+            .typing-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: __ACENTO__;
+                animation: dot-pulse 1.1s infinite ease-in-out;
+            }
+
+            .typing-dot:nth-child(2) { animation-delay: .14s; }
+            .typing-dot:nth-child(3) {
+                animation-delay: .28s;
+                margin-right: 5px;
+            }
+
+            .speak-button {
+                margin-top: 8px;
+                padding: 6px 10px;
+                border: 1px solid rgba(125,160,185,.24);
+                border-radius: 9px;
+                background: rgba(125,160,185,.08);
+                color: __COLOR_TEXTO__;
+                font: 12px 'Segoe UI', Arial, sans-serif;
+                cursor: pointer;
+            }
+
+            .speak-button:hover {
+                background: rgba(67,200,189,.16);
+            }
+
+            @keyframes message-appear {
+                from { opacity: 0; transform: translateY(8px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+
+            @keyframes dot-pulse {
+                0%, 60%, 100% {
+                    opacity: .35;
+                    transform: translateY(0);
+                }
+                30% {
+                    opacity: 1;
+                    transform: translateY(-4px);
+                }
+            }
+
+            @media (max-width: 650px) {
+                body { padding: 20px 16px 28px; }
+                .message.user { max-width: 92%; }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                *, *::before, *::after {
+                    animation-duration: .01ms !important;
+                    scroll-behavior: auto !important;
+                }
+            }
+            </style>
+        </head>
+        <body>
+            <main class="conversation">
+        """;
 
         StringBuilder html = new StringBuilder(
                 plantillaHtml
@@ -1330,9 +1546,15 @@ public class ChatController {
                         .replace("__FONDO_CODIGO__", fondoCodigo)
         );
 
-        for (ChatMessage message : messages) {
-            if (message.role.equals("user")) {
-                html.append("<section class='message user'><div class='role'>")
+        for (int messageIndex = 0;
+             messageIndex < messages.size();
+             messageIndex++) {
+
+            ChatMessage message = messages.get(messageIndex);
+
+            if ("user".equals(message.role)) {
+                html.append("<section class='message user'>")
+                        .append("<div class='role'>")
                         .append(etiquetaUsuario)
                         .append("</div><div>")
                         .append(escapeHtml(message.text).replace("\n", "<br>"))
@@ -1340,20 +1562,25 @@ public class ChatController {
             } else {
                 html.append("<section class='message assistant'>")
                         .append("<div class='avatar'>✦</div>")
-                        .append("<div class='assistant-body'><div class='message-meta'>")
+                        .append("<div class='assistant-body'>")
+                        .append("<div class='message-meta'>")
                         .append("<span class='role'>MarIA</span>")
                         .append("<span class='engine'>GEMINI</span>")
                         .append(etiquetaTurismo)
                         .append("</div>");
 
-                if (message.text.startsWith("*Consultando Gemini")) {
+                boolean consultando = message.text != null
+                        && message.text.startsWith("*Consultando Gemini");
+
+                if (consultando) {
                     String textoConsultando = switch (idiomaActual) {
                         case "English" -> "Thinking";
                         case "Français" -> "Réflexion en cours";
                         default -> "Pensando";
                     };
 
-                    html.append("<div class='typing'><span class='typing-dot'></span>")
+                    html.append("<div class='typing'>")
+                            .append("<span class='typing-dot'></span>")
                             .append("<span class='typing-dot'></span>")
                             .append("<span class='typing-dot'></span>")
                             .append(escapeHtml(textoConsultando))
@@ -1361,9 +1588,16 @@ public class ChatController {
                 } else {
                     html.append("<div class='content'>")
                             .append(markdownRenderer.render(
-                                    markdownParser.parse(message.text)
+                                    markdownParser.parse(
+                                            message.text == null ? "" : message.text
+                                    )
                             ))
-                            .append("</div>");
+                            .append("</div>")
+                            .append("<button class='speak-button' ")
+                            .append("title='Escuchar respuesta' ")
+                            .append("onclick='window.mariaAudio.play(")
+                            .append(messageIndex)
+                            .append(")'>Escuchar audio</button>");
                 }
 
                 html.append("</div></section>");
@@ -1581,6 +1815,8 @@ public class ChatController {
     private static final class ChatMessage {
         private final String role;
         private String text;
+        private volatile Path audioFile;
+
 
         private ChatMessage(String role, String text) {
             this.role = role;

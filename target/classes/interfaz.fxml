@@ -164,6 +164,11 @@
                            HBox.hgrow="ALWAYS"
                            styleClass="question-field"/>
 
+                <Button fx:id="microphoneButton"
+                        text="🎙 Dictar"
+                        onAction="#toggleRecording"
+                        styleClass="secondary-button"/>
+
                 <Button fx:id="sendButton"
                         id="sendButton"
                         text="Enviar  ↑"

@@ -1,7 +1,9 @@
 ChatDAO$MensajeGuardado.class
 UsuarioDAO$PerfilUsuario.class
 ChatDAO$ChatResumen.class
+AudioRecorder.class
 UsuarioHerramientas$CambioPerfil.class
+ChatController$AudioBridge.class
 LoginController.class
 ChatController$2.class
 ChatController$ChatMessage.class
@@ -12,6 +14,7 @@ ChatController$1.class
 RegistroController.class
 UsuarioSesion.class
 ChatDAO.class
+GeminiAudioService.class
 UsuarioHerramientas.class
 ChatController$3.class
 ConfiguracionDAO.class

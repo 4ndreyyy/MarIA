@@ -488,3 +488,27 @@
     -fx-background-color: #941c2b;
     -fx-border-color: #e06672;
 }
+.speak-button {
+    margin-top: 8px;
+    padding: 6px 10px;
+    border: 1px solid rgba(125,160,185,.24);
+    border-radius: 9px;
+    background: rgba(125,160,185,.08);
+    color: __COLOR_TEXTO__;
+    font: 12px 'Segoe UI', Arial, sans-serif;
+    cursor: pointer;
+}
+
+.speak-button:hover {
+    background: rgba(67,200,189,.16);
+}
+
+.recording-button {
+    -fx-background-color: #a92e42;
+    -fx-text-fill: white;
+    -fx-border-color: #d45b6b;
+}
+
+.recording-button:hover {
+    -fx-background-color: #8c2335;
+}
