@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<?import javafx.scene.control.ComboBox?>
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.web.WebView?>
 
@@ -14,67 +15,114 @@
             xmlns="http://javafx.com/javafx/21"
             xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="ChatController"
-            prefWidth="980.0"
-            prefHeight="650.0"
-            style="-fx-background-color: #39b6b6;">
+            prefWidth="1180.0"
+            prefHeight="780.0"
+            minWidth="900.0"
+            minHeight="640.0"
+            styleClass="app-shell"
+            stylesheets="@marIA.css">
 
     <top>
+        <VBox fx:id="headerBox" styleClass="app-header">
 
-        <VBox fx:id="headerBox"
-              spacing="5.0"
-              style="-fx-background-color: #39b6b6;">
-            <padding>
-                <Insets top="22.0" right="26.0" bottom="20.0" left="26.0"/>
-            </padding>
+            <HBox fx:id="windowTitleBar"
+                  alignment="CENTER_LEFT"
+                  spacing="10.0"
+                  styleClass="window-titlebar"
+                  onMousePressed="#iniciarArrastreVentana"
+                  onMouseDragged="#arrastrarVentana">
 
-            <Label fx:id="appTitleLabel"
-                   text="MarIA"
-                   style="-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #f4f7fb;"/>
+                <Label text="✦" styleClass="titlebar-mark"/>
+                <Label text="MarIA" styleClass="window-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
 
-            <Label fx:id="subtitleLabel"
-                   text="Tu asistente con Gemini  •  Pregunta lo que quieras"
-                   style="-fx-font-size: 13px; -fx-text-fill: #f0f8ff;"/>
+                <Button id="windowMinimizeButton"
+                        text="—"
+                        onAction="#minimizarVentana"
+                        styleClass="window-titlebar-button"/>
 
-            <Button fx:id="settingsButton"
-                    text="Preferencias"
-                    onAction="#abrirPreferencias"/>
+                <Button fx:id="maximizeButton"
+                        id="maximizeButton"
+                        text="□"
+                        onAction="#alternarMaximizarVentana"
+                        styleClass="window-titlebar-button"/>
 
-            <HBox spacing="8.0" alignment="CENTER_LEFT">
-                <Label text="Modo de IA:"
-                       style="-fx-text-fill: white;"/>
+                <Button id="windowCloseButton"
+                        text="×"
+                        onAction="#cerrarVentana"
+                        styleClass="window-titlebar-button"/>
+            </HBox>
 
-                <ComboBox fx:id="specialtyCombo"
-                          prefWidth="150.0"/>
+            <HBox alignment="CENTER_LEFT" spacing="14.0">
+                <padding>
+                    <Insets top="10.0" right="28.0" bottom="18.0" left="28.0"/>
+                </padding>
+
+                <Button fx:id="historyToggleButton"
+                        text="☰"
+                        onAction="#alternarHistorial"
+                        styleClass="icon-button"/>
+
+                <Label text="✦" styleClass="brand-mark"/>
+
+                <VBox spacing="3.0">
+                    <Label fx:id="appTitleLabel"
+                           text="MarIA"
+                           styleClass="app-title"/>
+                    <Label fx:id="subtitleLabel"
+                           text="Tu asistente de IA, en tu espacio"
+                           styleClass="app-subtitle"/>
+                </VBox>
+
+                <Region HBox.hgrow="ALWAYS"/>
+
+                <VBox spacing="5.0" styleClass="mode-control">
+                    <Label fx:id="modeLabel"
+                           text="MODO ACTIVO"
+                           styleClass="eyebrow-label"/>
+                    <ComboBox fx:id="specialtyCombo"
+                              prefWidth="170.0"
+                              styleClass="specialty-combo"/>
+                </VBox>
+
+                <Button fx:id="settingsButton"
+                        text="⚙  Preferencias"
+                        onAction="#abrirPreferencias"
+                        styleClass="secondary-button"/>
             </HBox>
         </VBox>
     </top>
-
     <center>
-        <HBox spacing="12.0">
+        <HBox spacing="18.0" styleClass="workspace">
             <BorderPane.margin>
-                <Insets top="18.0" right="18.0" bottom="14.0" left="18.0"/>
+                <Insets top="18.0" right="24.0" bottom="12.0" left="24.0"/>
             </BorderPane.margin>
 
             <VBox fx:id="historyBox"
-                  spacing="8.0"
-                  prefWidth="230.0"
-                  minWidth="190.0"
-                  maxWidth="250.0"
-                  style="-fx-background-color: #172431; -fx-padding: 12; -fx-background-radius: 10;">
-
+                  spacing="12.0"
+                  prefWidth="250.0"
+                  minWidth="210.0"
+                  maxWidth="285.0"
+                  styleClass="history-panel">
                 <Label fx:id="historyTitleLabel"
                        text="Mis conversaciones"
-                       style="-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: white;"/>
+                       styleClass="history-title"/>
 
                 <Button fx:id="newChatButton"
-                        text="＋ Nuevo chat"
+                        text="＋  Nuevo chat"
                         onAction="#nuevoChat"
                         maxWidth="Infinity"
-                        style="-fx-background-color: #18a6a6; -fx-text-fill: white; -fx-font-weight: bold;"/>
+                        styleClass="primary-button"/>
+
+                <Label fx:id="recentLabel"
+                       id="recentLabel"
+                       text="RECIENTES"
+                       styleClass="eyebrow-label"/>
 
                 <ListView fx:id="historyList"
+                          id="historyList"
                           VBox.vgrow="ALWAYS"
-                          style="-fx-background-color: #141e2a;"/>
+                          styleClass="history-list"/>
             </VBox>
 
             <WebView fx:id="chatView"
@@ -83,43 +131,50 @@
     </center>
 
     <bottom>
-        <VBox fx:id="inputArea" spacing="9.0">
+        <VBox fx:id="inputArea" spacing="10.0" styleClass="composer-area">
             <padding>
-                <Insets top="4.0" right="26.0" bottom="22.0" left="26.0"/>
+                <Insets top="4.0" right="28.0" bottom="20.0" left="28.0"/>
             </padding>
 
-            <HBox spacing="10.0" alignment="CENTER_LEFT">
+            <HBox spacing="9.0"
+                  alignment="CENTER_LEFT"
+                  styleClass="attachment-row">
                 <Button fx:id="attachButton"
-                        text="Adjuntar archivo"
+                        id="attachButton"
+                        text="＋  Adjuntar archivo"
                         onAction="#adjuntarArchivo"
-                        style="-fx-background-color: #18a6a6; -fx-text-fill: white; -fx-font-weight: bold;"/>
+                        styleClass="secondary-button"/>
 
                 <Label fx:id="attachmentLabel"
                        text="Sin archivo adjunto"
-                       style="-fx-text-fill: white;"/>
+                       styleClass="attachment-label"/>
 
                 <Button fx:id="removeButton"
                         text="Quitar"
-                        onAction="#quitarArchivo"/>
+                        onAction="#quitarArchivo"
+                        styleClass="text-button"/>
             </HBox>
 
-            <HBox spacing="10.0" alignment="CENTER">
+            <HBox spacing="10.0"
+                  alignment="CENTER"
+                  styleClass="composer-row">
                 <TextField fx:id="questionField"
                            promptText="Escribe tu pregunta…"
                            onAction="#sendQuestion"
                            HBox.hgrow="ALWAYS"
-                           style="-fx-background-color: #262656; -fx-text-fill: #f4f7fb; -fx-prompt-text-fill: #8495a7; -fx-background-radius: 10px; -fx-padding: 13px; -fx-font-size: 14px;"/>
+                           styleClass="question-field"/>
 
                 <Button fx:id="sendButton"
-                        text="Enviar"
+                        id="sendButton"
+                        text="Enviar  ↑"
                         onAction="#sendQuestion"
                         defaultButton="true"
-                        style="-fx-background-color: #5c5cd0; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 12px 20px; -fx-cursor: hand;"/>
+                        styleClass="primary-button"/>
             </HBox>
 
             <Label fx:id="footerLabel"
                    text="La clave API se lee desde las variables de entorno de Windows."
-                   style="-fx-font-size: 11px; -fx-text-fill: #718196;"/>
+                   styleClass="footer-label"/>
         </VBox>
     </bottom>
 </BorderPane>

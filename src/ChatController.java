@@ -44,32 +44,74 @@ import javafx.scene.control.ListCell;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.Tool;
 import java.lang.reflect.Method;
-
-
-
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
+import javafx.util.Duration;
+import javafx.scene.paint.Color;
+import javafx.scene.control.ListCell;
+import javafx.scene.Node;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.HBox;
 
 
 public class ChatController {
-    @FXML private WebView chatView;
-    @FXML private TextField questionField;
-    @FXML private Button sendButton;
-    @FXML private ListView<ChatDAO.ChatResumen> historyList;
-    @FXML private Label attachmentLabel;
-    @FXML private BorderPane rootPane;
-    @FXML private VBox headerBox;
-    @FXML private VBox historyBox;
-    @FXML private VBox inputArea;
+    @FXML
+    private WebView chatView;
+    @FXML
+    private TextField questionField;
+    @FXML
+    private Button sendButton;
+    @FXML
+    private ListView<ChatDAO.ChatResumen> historyList;
+    @FXML
+    private Label attachmentLabel;
+    @FXML
+    private BorderPane rootPane;
+    @FXML
+    private VBox headerBox;
+    @FXML
+    private VBox historyBox;
+    @FXML
+    private VBox inputArea;
 
-    @FXML private Label appTitleLabel;
-    @FXML private Label subtitleLabel;
-    @FXML private Label historyTitleLabel;
-    @FXML private Label footerLabel;
+    @FXML
+    private Button maximizeButton;
+    @FXML
+    private HBox windowTitleBar;
 
-    @FXML private ComboBox<String> specialtyCombo;
-    @FXML private Button settingsButton;
-    @FXML private Button newChatButton;
-    @FXML private Button attachButton;
-    @FXML private Button removeButton;
+    private double arrastreOffsetX;
+    private double arrastreOffsetY;
+    @FXML
+    private Label appTitleLabel;
+    @FXML
+    private Label subtitleLabel;
+    @FXML
+    private Label historyTitleLabel;
+    @FXML
+    private Label footerLabel;
+
+    @FXML
+    private Button historyToggleButton;
+    @FXML
+    private Label modeLabel;
+    @FXML
+    private Label recentLabel;
+
+    private boolean historialVisible = true;
+    private Timeline animacionHistorial;
+
+    @FXML
+    private ComboBox<String> specialtyCombo;
+    @FXML
+    private Button settingsButton;
+    @FXML
+    private Button newChatButton;
+    @FXML
+    private Button attachButton;
+    @FXML
+    private Button removeButton;
 
     private String idiomaActual = "Español";
     private String temaActual = "Oscuro";
@@ -99,8 +141,19 @@ public class ChatController {
 
     @FXML
     private void initialize() {
+        if (!rootPane.getStyleClass().contains("theme-dark")) {
+            rootPane.getStyleClass().add("theme-dark");
+        }
+        estilizarCombo(specialtyCombo);
         specialtyCombo.getItems().setAll("General", "Turismo");
         specialtyCombo.setValue("General");
+
+        actualizarEstiloEspecialidad("General");
+
+        specialtyCombo.valueProperty().addListener(
+                (observable, anterior, actual) ->
+                        actualizarEstiloEspecialidad(actual)
+        );
 
         historyList.getSelectionModel()
                 .selectedItemProperty()
@@ -156,6 +209,80 @@ public class ChatController {
         ));
         renderMessages();
     }
+
+    @FXML
+    private void minimizarVentana() {
+        ventanaActual().setIconified(true);
+    }
+
+    @FXML
+    private void alternarMaximizarVentana() {
+        Stage ventana = ventanaActual();
+
+        boolean maximizada = !ventana.isMaximized();
+        ventana.setMaximized(maximizada);
+        maximizeButton.setText(maximizada ? "❐" : "□");
+    }
+
+    @FXML
+    private void cerrarVentana() {
+        ventanaActual().close();
+    }
+
+    @FXML
+    private void iniciarArrastreVentana(MouseEvent evento) {
+        if (eventoEnBotonDeTitulo(evento)) {
+            return;
+        }
+
+        if (evento.getClickCount() == 2) {
+            alternarMaximizarVentana();
+            return;
+        }
+
+        Stage ventana = ventanaActual();
+
+        if (!ventana.isMaximized()) {
+            arrastreOffsetX = evento.getScreenX() - ventana.getX();
+            arrastreOffsetY = evento.getScreenY() - ventana.getY();
+        }
+    }
+
+    @FXML
+    private void arrastrarVentana(MouseEvent evento) {
+        if (eventoEnBotonDeTitulo(evento)) {
+            return;
+        }
+
+        Stage ventana = ventanaActual();
+
+        if (!ventana.isMaximized()) {
+            ventana.setX(evento.getScreenX() - arrastreOffsetX);
+            ventana.setY(evento.getScreenY() - arrastreOffsetY);
+        }
+    }
+
+    private boolean eventoEnBotonDeTitulo(MouseEvent evento) {
+        if (!(evento.getTarget() instanceof Node objetivo)) {
+            return false;
+        }
+
+        Node nodo = objetivo;
+
+        while (nodo != null && nodo != windowTitleBar) {
+            if (nodo instanceof Button) {
+                return true;
+            }
+            nodo = nodo.getParent();
+        }
+
+        return false;
+    }
+
+    private Stage ventanaActual() {
+        return (Stage) rootPane.getScene().getWindow();
+    }
+
 
     private String obtenerExtension(Path archivo) {
         String nombre = archivo.getFileName()
@@ -213,14 +340,17 @@ public class ChatController {
             ComboBox<String> idioma = new ComboBox<>();
             idioma.getItems().addAll("Español", "English", "Français");
             idioma.setValue(actual.idioma());
+            estilizarCombo(idioma);
 
             ComboBox<String> tema = new ComboBox<>();
             tema.getItems().addAll("Claro", "Oscuro");
             tema.setValue(actual.tema());
+            estilizarCombo(tema);
 
             ComboBox<String> tono = new ComboBox<>();
             tono.getItems().addAll("Formal", "Informal");
             tono.setValue(actual.tonoIA());
+            estilizarCombo(tono);
 
             VBox formulario = new VBox(
                     8,
@@ -247,8 +377,17 @@ public class ChatController {
             dialogo.initOwner(chatView.getScene().getWindow());
             dialogo.getDialogPane().getButtonTypes().addAll(guardar, cancelar);
             dialogo.getDialogPane().setContent(formulario);
+            var panelDialogo = dialogo.getDialogPane();
+            aplicarEstiloDialogo(panelDialogo, tema.getValue());
+
+            tema.valueProperty().addListener((observable, anterior, nuevoTema) -> {
+                aplicarEstiloDialogo(panelDialogo, nuevoTema);
+                estilizarCombo(idioma, nuevoTema);
+                estilizarCombo(tema, nuevoTema);
+                estilizarCombo(tono, nuevoTema);
+            });
             Button borrarCuenta = new Button("Eliminar mi cuenta");
-            borrarCuenta.setStyle("-fx-text-fill: #b00020;");
+            borrarCuenta.getStyleClass().add("danger-button");
             borrarCuenta.setOnAction(evento -> {
                 dialogo.close();
                 eliminarCuenta();
@@ -306,40 +445,32 @@ public class ChatController {
 
         boolean oscuro = tema.equals("Oscuro");
 
-        String fondo = oscuro ? "#101722" : "#edf3f5";
-        String fondoCabecera = oscuro ? "#162331" : "#d9eeee";
-        String fondoHistorial = oscuro ? "#172431" : "#ffffff";
-        String colorTexto = oscuro ? "#f4f7fb" : "#172431";
-        String fondoChat = oscuro ? "#141e2a" : "#f4f6f8";
-        String burbujaUsuario = oscuro ? "#20384a" : "#d9eeee";
+        rootPane.getStyleClass().removeAll("theme-dark", "theme-light");
+        rootPane.getStyleClass().add(oscuro ? "theme-dark" : "theme-light");
+        estilizarCombo(specialtyCombo);
 
-        rootPane.setStyle("-fx-background-color: " + fondo + ";");
-        headerBox.setStyle("-fx-background-color: " + fondoCabecera + ";");
-        historyBox.setStyle(
-                "-fx-background-color: " + fondoHistorial
-                        + "; -fx-padding: 12; -fx-background-radius: 10;"
-        );
-        inputArea.setStyle("-fx-background-color: " + fondo + ";");
-
-        appTitleLabel.setStyle(
-                "-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: "
-                        + colorTexto + ";"
-        );
-        subtitleLabel.setStyle("-fx-text-fill: " + colorTexto + ";");
-        historyTitleLabel.setStyle(
-                "-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: "
-                        + colorTexto + ";"
-        );
-        footerLabel.setStyle("-fx-text-fill: " + colorTexto + ";");
-        attachmentLabel.setStyle("-fx-text-fill: " + colorTexto + ";");
+        String fondoChat = oscuro ? "#0e1725" : "#f7f9fa";
+        String colorTexto = oscuro ? "#e8eef5" : "#243744";
+        String burbujaUsuario = oscuro ? "#1d3448" : "#e1efee";
 
         historyList.setCellFactory(lista -> new ListCell<>() {
             @Override
             protected void updateItem(ChatDAO.ChatResumen chat, boolean vacio) {
                 super.updateItem(chat, vacio);
-                setText(vacio || chat == null ? null : chat.toString());
-                setTextFill(Color.web(colorTexto));
-                setStyle("-fx-background-color: " + fondoHistorial + ";");
+                setStyle("");
+
+                if (vacio || chat == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    Label textoChat = new Label(chat.toString());
+                    textoChat.setWrapText(true);
+                    textoChat.setMaxWidth(200);
+                    textoChat.setTextFill(Color.web(colorTexto));
+
+                    setText(null);
+                    setGraphic(textoChat);
+                }
             }
         });
 
@@ -347,8 +478,10 @@ public class ChatController {
             case "English" -> {
                 subtitleLabel.setText("Your Gemini assistant • Ask anything");
                 historyTitleLabel.setText("My conversations");
+                modeLabel.setText("ACTIVE MODE");
+                recentLabel.setText("RECENT");
                 newChatButton.setText("＋ New chat");
-                settingsButton.setText("Preferences");
+                settingsButton.setText("⚙  Preferences");
                 attachButton.setText("Attach file");
                 removeButton.setText("Remove");
                 sendButton.setText("Send");
@@ -360,11 +493,14 @@ public class ChatController {
                         "The API key is read from the Windows environment variables."
                 );
             }
+
             case "Français" -> {
                 subtitleLabel.setText("Votre assistant Gemini • Posez une question");
                 historyTitleLabel.setText("Mes conversations");
+                modeLabel.setText("MODE ACTIF");
+                recentLabel.setText("RÉCENTS");
                 newChatButton.setText("＋ Nouveau chat");
-                settingsButton.setText("Préférences");
+                settingsButton.setText("⚙  Préférences");
                 attachButton.setText("Joindre un fichier");
                 removeButton.setText("Supprimer");
                 sendButton.setText("Envoyer");
@@ -376,13 +512,16 @@ public class ChatController {
                         "La clé API est lue depuis les variables d’environnement Windows."
                 );
             }
+
             default -> {
                 subtitleLabel.setText(
                         "Tu asistente con Gemini  •  Pregunta lo que quieras"
                 );
                 historyTitleLabel.setText("Mis conversaciones");
+                modeLabel.setText("MODO ACTIVO");
+                recentLabel.setText("RECIENTES");
                 newChatButton.setText("＋ Nuevo chat");
-                settingsButton.setText("Preferencias");
+                settingsButton.setText("⚙  Preferencias");
                 attachButton.setText("Adjuntar archivo");
                 removeButton.setText("Quitar");
                 sendButton.setText("Enviar");
@@ -399,7 +538,149 @@ public class ChatController {
         fondoChatActual = fondoChat;
         colorTextoChatActual = colorTexto;
         burbujaUsuarioActual = burbujaUsuario;
+
         renderMessages();
+    }
+
+    private void aplicarEstiloDialogo(
+            javafx.scene.control.DialogPane panel,
+            String tema
+    ) {
+        var hojaEstilos = getClass().getResource("/marIA.css");
+
+        if (hojaEstilos != null) {
+            String url = hojaEstilos.toExternalForm();
+
+            if (!panel.getStylesheets().contains(url)) {
+                panel.getStylesheets().add(url);
+            }
+        }
+
+        panel.getStyleClass().remove("maria-dialog-dark");
+        panel.getStyleClass().remove("maria-dialog-light");
+
+        panel.getStyleClass().add(
+                "Oscuro".equals(tema)
+                        ? "maria-dialog-dark"
+                        : "maria-dialog-light"
+        );
+    }
+
+    private void estilizarCombo(ComboBox<String> combo) {
+        estilizarCombo(combo, temaActual);
+    }
+
+    private void estilizarCombo(ComboBox<String> combo, String tema) {
+        boolean oscuro = "Oscuro".equals(tema);
+
+        String fondoOpciones = oscuro ? "#1b2b3d" : "#edf2f4";
+        String fondoSeleccion = oscuro ? "#2b465c" : "#d7e5e9";
+        String colorTexto = oscuro ? "#e8f1f5" : "#263946";
+
+        combo.setCellFactory(lista -> new ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean vacio) {
+                super.updateItem(item, vacio);
+
+                setText(vacio || item == null ? null : item);
+                setTextFill(Color.web(colorTexto));
+
+                String fondo = isSelected()
+                        ? fondoSeleccion
+                        : fondoOpciones;
+
+                setStyle(
+                        "-fx-background-color: " + fondo + ";"
+                                + " -fx-padding: 8 10 8 10;"
+                );
+            }
+        });
+
+        combo.setButtonCell(new ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean vacio) {
+                super.updateItem(item, vacio);
+
+                setText(vacio || item == null ? null : item);
+                setTextFill(Color.web(colorTexto));
+                setStyle("-fx-background-color: transparent;");
+            }
+        });
+    }
+
+    private void actualizarEstiloEspecialidad(String especialidad) {
+        if (rootPane == null) {
+            return;
+        }
+
+        rootPane.getStyleClass().remove("tourism-mode");
+
+        if ("Turismo".equals(especialidad)) {
+            rootPane.getStyleClass().add("tourism-mode");
+        }
+    }
+
+    @FXML
+    private void alternarHistorial() {
+        if (historyBox == null) {
+            return;
+        }
+
+        boolean mostrar = !historialVisible;
+        historialVisible = mostrar;
+
+        if (animacionHistorial != null) {
+            animacionHistorial.stop();
+        }
+
+        if (mostrar) {
+            historyBox.setManaged(true);
+            historyBox.setVisible(true);
+            historyBox.setMinWidth(0);
+            historyBox.setMaxWidth(Double.MAX_VALUE);
+            historyBox.setPrefWidth(0);
+            historyBox.setOpacity(0);
+        } else {
+            historyBox.setMinWidth(0);
+            historyBox.setMaxWidth(Double.MAX_VALUE);
+        }
+
+        double anchoInicial = historyBox.getPrefWidth();
+        double opacidadInicial = historyBox.getOpacity();
+        double anchoFinal = mostrar ? 250 : 0;
+        double opacidadFinal = mostrar ? 1 : 0;
+
+        animacionHistorial = new Timeline(
+                new KeyFrame(
+                        Duration.ZERO,
+                        new KeyValue(historyBox.prefWidthProperty(), anchoInicial),
+                        new KeyValue(historyBox.opacityProperty(), opacidadInicial)
+                ),
+                new KeyFrame(
+                        Duration.millis(220),
+                        new KeyValue(
+                                historyBox.prefWidthProperty(),
+                                anchoFinal,
+                                Interpolator.EASE_BOTH
+                        ),
+                        new KeyValue(
+                                historyBox.opacityProperty(),
+                                opacidadFinal,
+                                Interpolator.EASE_BOTH
+                        )
+                )
+        );
+
+        animacionHistorial.setOnFinished(evento -> {
+            historyBox.setVisible(mostrar);
+            historyBox.setManaged(mostrar);
+            historyBox.setOpacity(1);
+            historyBox.setMinWidth(210);
+            historyBox.setMaxWidth(285);
+            historyBox.setPrefWidth(250);
+        });
+
+        animacionHistorial.play();
     }
 
     @FXML
@@ -808,75 +1089,288 @@ public class ChatController {
         String colorTextoChat = colorTextoChatActual;
         String burbujaUsuario = burbujaUsuarioActual;
 
+        boolean modoTurismo = specialtyCombo != null
+                && "Turismo".equals(specialtyCombo.getValue());
+
+        String acento = modoTurismo ? "#f2a176" : "#43c8bd";
+        String etiquetaTurismo = modoTurismo
+                ? "<span class='specialty-badge'>✦ TURISMO</span>"
+                : "";
+
+        String etiquetaUsuario = switch (idiomaActual) {
+            case "English" -> "You";
+            case "Français" -> "Vous";
+            default -> "Tú";
+        };
+
+        String fondoCodigo = temaActual.equals("Oscuro")
+                ? "#101923"
+                : "#e9f0f1";
+
         String plantillaHtml = """
-        <!DOCTYPE html>
-        <html><head><meta charset="UTF-8"><style>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
         * { box-sizing: border-box; }
-        body { margin: 0; padding: 18px 22px 28px;
-               background: __FONDO_CHAT__;
-               color: __COLOR_TEXTO__;
-               font: 15px/1.65 'Segoe UI', Arial, sans-serif; }
-        .message { margin: 0 auto 18px; max-width: 900px; }
-        .user { margin-left: auto; max-width: 82%; padding: 12px 16px;
-                border-radius: 16px 16px 4px 16px;
-                background: __BURBUJA_USUARIO__; }
-        .assistant { margin-right: auto; padding: 4px 8px 12px; }
-        .role { margin-bottom: 5px; color: #38c5bd; font-size: 12px;
-                font-weight: 700; letter-spacing: .04em;
-                text-transform: uppercase; }
-        p { margin: 7px 0 12px; }
-        h1, h2, h3 { margin: 18px 0 8px; color: #f4f7fb; line-height: 1.3; }
-        h1 { font-size: 1.5em; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 28px 30px 38px;
+            background: __FONDO_CHAT__;
+            color: __COLOR_TEXTO__;
+            font: 15px/1.7 'Segoe UI', Arial, sans-serif;
+        }
+
+        .conversation {
+            width: min(100%, 940px);
+            margin: 0 auto;
+        }
+
+        .message {
+            width: fit-content;
+            max-width: 100%;
+            margin: 0 0 28px;
+            animation: message-appear .3s ease-out both;
+        }
+
+        .message.user {
+            max-width: min(78%, 690px);
+            margin-left: auto;
+            padding: 14px 18px 15px;
+            border: 1px solid rgba(130,170,190,.14);
+            border-radius: 20px 20px 5px 20px;
+            background: __BURBUJA_USUARIO__;
+        }
+
+        .user .role {
+            margin-bottom: 4px;
+            color: __ACENTO__;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: .13em;
+            text-transform: uppercase;
+        }
+
+        .assistant {
+            display: flex;
+            align-items: flex-start;
+            gap: 13px;
+            width: 100%;
+            padding: 2px 0 3px;
+        }
+
+        .avatar {
+            display: grid;
+            flex: 0 0 34px;
+            width: 34px;
+            height: 34px;
+            place-items: center;
+            border-radius: 12px;
+            background: linear-gradient(145deg, __ACENTO__, #168f9b);
+            color: #092027;
+            font-size: 17px;
+            font-weight: 800;
+        }
+
+        .assistant-body {
+            min-width: 0;
+            flex: 1;
+            padding-top: 2px;
+        }
+
+        .message-meta {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            min-height: 25px;
+            margin-bottom: 7px;
+        }
+
+        .role {
+            color: __ACENTO__;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+        }
+
+        .engine {
+            color: #899bac;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: .1em;
+        }
+
+        .specialty-badge {
+            padding: 3px 8px;
+            border: 1px solid rgba(242,161,118,.28);
+            border-radius: 20px;
+            background: rgba(242,161,118,.10);
+            color: #f2a176;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: .06em;
+        }
+
+        .content { overflow-wrap: anywhere; }
+        p { margin: 6px 0 13px; }
+
+        h1, h2, h3 {
+            margin: 21px 0 9px;
+            color: __COLOR_TEXTO__;
+            line-height: 1.3;
+        }
+
+        h1 { font-size: 1.55em; }
         h2 { font-size: 1.3em; }
         h3 { font-size: 1.12em; }
+
         ul, ol { padding-left: 25px; margin: 8px 0 14px; }
-        li { margin: 3px 0; }
-        strong { color: #fff; }
-        a { color: #5ed6d0; }
-        blockquote { margin: 12px 0; padding: 3px 13px;
-                     border-left: 3px solid #18a6a6; color: #b8c7d6; }
-        code { padding: 2px 5px; border-radius: 4px;
-               background: #263545; color: #9ee7dd;
-               font-family: Consolas, monospace; }
-        pre { overflow-x: auto; padding: 13px 15px;
-              border-radius: 9px; background: #0d141d; }
-        pre code { padding: 0; background: transparent; color: #dce8f3; }
-        hr { border: 0; border-top: 1px solid #344252; margin: 15px 0; }
-        </style></head><body>
-        """;
+        li { margin: 4px 0; padding-left: 2px; }
+        strong { color: __COLOR_TEXTO__; }
+        a { color: __ACENTO__; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        blockquote {
+            margin: 13px 0;
+            padding: 4px 14px;
+            border-left: 3px solid __ACENTO__;
+            color: #aebfcb;
+        }
+
+        code {
+            padding: 2px 6px;
+            border-radius: 6px;
+            background: __FONDO_CODIGO__;
+            color: __ACENTO__;
+            font-family: Consolas, monospace;
+            font-size: .92em;
+        }
+
+        pre {
+            overflow-x: auto;
+            margin: 12px 0;
+            padding: 15px 17px;
+            border: 1px solid rgba(135,160,180,.16);
+            border-radius: 13px;
+            background: __FONDO_CODIGO__;
+        }
+
+        pre code {
+            padding: 0;
+            background: transparent;
+            color: __COLOR_TEXTO__;
+        }
+
+        hr {
+            height: 1px;
+            border: 0;
+            background: rgba(135,160,180,.22);
+            margin: 18px 0;
+        }
+
+        .typing {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 24px;
+            color: #91a3b5;
+            font-size: 13px;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: __ACENTO__;
+            animation: dot-pulse 1.1s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: .14s; }
+        .typing-dot:nth-child(3) { animation-delay: .28s; margin-right: 5px; }
+
+        @keyframes message-appear {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes dot-pulse {
+            0%, 60%, 100% { opacity: .35; transform: translateY(0); }
+            30% { opacity: 1; transform: translateY(-4px); }
+        }
+
+        @media (max-width: 650px) {
+            body { padding: 20px 16px 28px; }
+            .message.user { max-width: 92%; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: .01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+        </style>
+    </head>
+    <body>
+        <main class="conversation">
+    """;
 
         StringBuilder html = new StringBuilder(
                 plantillaHtml
                         .replace("__FONDO_CHAT__", fondoChat)
                         .replace("__COLOR_TEXTO__", colorTextoChat)
                         .replace("__BURBUJA_USUARIO__", burbujaUsuario)
+                        .replace("__ACENTO__", acento)
+                        .replace("__FONDO_CODIGO__", fondoCodigo)
         );
 
         for (ChatMessage message : messages) {
             if (message.role.equals("user")) {
-                html.append(
-                                "<div class='message user'><div class='role'>Tú</div><div>"
-                        )
-                        .append(
-                                escapeHtml(message.text)
-                                        .replace("\n", "<br>")
-                        )
-                        .append("</div></div>");
+                html.append("<section class='message user'><div class='role'>")
+                        .append(etiquetaUsuario)
+                        .append("</div><div>")
+                        .append(escapeHtml(message.text).replace("\n", "<br>"))
+                        .append("</div></section>");
             } else {
-                html.append(
-                                "<div class='message assistant'>" +
-                                        "<div class='role'>Gemini</div><div class='content'>"
-                        )
-                        .append(
-                                markdownRenderer.render(
-                                        markdownParser.parse(message.text)
-                                )
-                        )
-                        .append("</div></div>");
+                html.append("<section class='message assistant'>")
+                        .append("<div class='avatar'>✦</div>")
+                        .append("<div class='assistant-body'><div class='message-meta'>")
+                        .append("<span class='role'>MarIA</span>")
+                        .append("<span class='engine'>GEMINI</span>")
+                        .append(etiquetaTurismo)
+                        .append("</div>");
+
+                if (message.text.startsWith("*Consultando Gemini")) {
+                    String textoConsultando = switch (idiomaActual) {
+                        case "English" -> "Thinking";
+                        case "Français" -> "Réflexion en cours";
+                        default -> "Pensando";
+                    };
+
+                    html.append("<div class='typing'><span class='typing-dot'></span>")
+                            .append("<span class='typing-dot'></span>")
+                            .append("<span class='typing-dot'></span>")
+                            .append(escapeHtml(textoConsultando))
+                            .append("</div>");
+                } else {
+                    html.append("<div class='content'>")
+                            .append(markdownRenderer.render(
+                                    markdownParser.parse(message.text)
+                            ))
+                            .append("</div>");
+                }
+
+                html.append("</div></section>");
             }
         }
 
-        html.append("</body></html>");
+        html.append("</main></body></html>");
         chatView.getEngine().loadContent(html.toString(), "text/html");
     }
 
