@@ -491,7 +491,9 @@
 .speak-button {
     margin-top: 8px;
     padding: 6px 10px;
-    border: 1px solid rgba(125,160,185,.24);
+    -fx-border-width: 1px;
+    -fx-border-style: solid;
+    -fx-border-color: #294057;
     border-radius: 9px;
     background: rgba(125,160,185,.08);
     color: __COLOR_TEXTO__;

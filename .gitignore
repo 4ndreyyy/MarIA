@@ -1,8 +1,17 @@
 ### IntelliJ IDEA ###
+.idea/
+*.iml
 out/
+target/
 !**/src/main/**/out/
 !**/src/test/**/out/
 .kotlin
+
+### Configuración local ###
+.env
+.env.*
+!.env.example
+*.wav
 
 ### Eclipse ###
 .apt_generated
