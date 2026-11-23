@@ -15,6 +15,7 @@ La aplicación está pensada para ejecutarse localmente desde Windows e IntelliJ
 - Archivos `.txt`, `.pdf`, `.png`, `.jpg` y `.jpeg` (este último se normaliza como `.jpg`), con un límite de 10 MiB por archivo. El contenido se envía a Gemini y se guarda en Oracle.
 - Dictado por micrófono: graba WAV temporal, solicita la transcripción y la coloca en el campo de pregunta para que el usuario la revise y la envíe.
 - Lectura de respuestas en voz: genera WAV bajo demanda con el modelo TTS configurado y lo reproduce localmente.
+- Membresía de prueba: el plan `BAS1` permite el chat General y `PRO1` habilita Turismo. La activación y cancelación requieren confirmación y no procesan pagos.
 - Interfaz con JavaFX, FXML, CSS, formato Markdown y controles personalizados de ventana.
 
 ## Tecnologías
@@ -126,6 +127,16 @@ Tablas consultadas o modificadas por los DAO:
 El registro actual crea preferencias iniciales con Español, Formal y Claro y usa el identificador de membresía `BAS1`; ese registro debe existir y ser válido para la FK de `HR.USUARIOS.ID_TIPOS`. El código también espera una fila de `HR.MODELO` con el código API indicado arriba; si no existe, no puede crear una conversación.
 
 En los adjuntos, el mensaje se inserta en `HR.MENSAJES` y el contenido binario en `HR.ARCHIVOADJ` dentro de una transacción. En texto normal, el contenido se guarda en el campo CLOB de `MENSAJES`. En modo Turismo se agrega un registro de especialidad vinculado al mensaje del usuario. Al eliminar la cuenta, la aplicación elimina el usuario; las dependencias deben tener las reglas de cascada apropiadas. La configuración se elimina solamente si deja de estar vinculada a otros usuarios.
+
+## Membresía de prueba
+
+La ventana **Preferencias** muestra el plan asignado y los botones para activar o cancelar la suscripción simulada. La confirmación actualiza `HR.USUARIOS.ID_TIPOS`; no se conecta a una pasarela ni realiza cargos.
+
+- `BAS1` es el plan básico y mantiene disponible el chat General.
+- `PRO1` es el plan Plus de prueba y habilita el selector de Turismo.
+- Al cancelar, la cuenta vuelve a `BAS1`. El catálogo `HR.MEMBRESIAS` define los planes; no se modifica con cada suscripción individual.
+
+Antes de usar los botones, ejecuta una vez `docs/sql/membresia_prueba.sql` en SQL Developer conectado como `HR` (ejecutar como script). El registro `BAS1` debe existir previamente. El script crea o actualiza el plan `PRO1` con el límite de tokens configurado para la prueba.
 
 ## Ejecutar
 

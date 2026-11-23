@@ -17,6 +17,8 @@ com\maria\dao\ChatDAO$MensajeGuardado.class
 com\maria\dao\UsuarioDAO.class
 com\maria\controller\ChatController$ChatMessage.class
 com\maria\dao\ChatDAO$ChatResumen.class
+com\maria\dao\MembresiaDAO$Membresia.class
+com\maria\dao\MembresiaDAO.class
 com\maria\service\GeminiAudioService.class
 com\maria\service\AudioRecorder.class
 com\maria\service\UsuarioHerramientas$CambioPerfil.class

@@ -9,6 +9,7 @@ import com.google.genai.types.HttpRetryOptions;
 import com.google.genai.types.Part;
 import com.google.genai.types.Tool;
 import com.maria.dao.ChatDAO;
+import com.maria.dao.MembresiaDAO;
 import com.maria.dao.ConfiguracionDAO;
 import com.maria.dao.UsuarioDAO;
 import com.maria.model.UsuarioSesion;
@@ -392,6 +393,42 @@ public class ChatController {
             );
             formulario.setStyle("-fx-padding: 16;");
 
+            Label estadoMembresia = new Label();
+            Button suscribirseButton = new Button();
+            Button cancelarSuscripcionButton = new Button();
+            suscribirseButton.getStyleClass().add("subscription-button");
+            cancelarSuscripcionButton.getStyleClass().add("danger-button");
+            suscribirseButton.setMaxWidth(Double.MAX_VALUE);
+            cancelarSuscripcionButton.setMaxWidth(Double.MAX_VALUE);
+            formulario.getChildren().addAll(
+                    new javafx.scene.control.Separator(),
+                    new Label(textoSeccionMembresia()),
+                    estadoMembresia,
+                    suscribirseButton,
+                    cancelarSuscripcionButton
+            );
+            actualizarControlesMembresia(
+                    estadoMembresia,
+                    suscribirseButton,
+                    cancelarSuscripcionButton
+            );
+            suscribirseButton.setOnAction(evento ->
+                    confirmarCambioMembresia(
+                            true,
+                            estadoMembresia,
+                            suscribirseButton,
+                            cancelarSuscripcionButton
+                    )
+            );
+            cancelarSuscripcionButton.setOnAction(evento ->
+                    confirmarCambioMembresia(
+                            false,
+                            estadoMembresia,
+                            suscribirseButton,
+                            cancelarSuscripcionButton
+                    )
+            );
+
             ButtonType guardar = new ButtonType(
                     "Guardar",
                     ButtonBar.ButtonData.OK_DONE
@@ -461,6 +498,171 @@ public class ChatController {
                             + error.getMessage()
             ).showAndWait();
         }
+    }
+
+    private String textoSeccionMembresia() {
+        return switch (idiomaActual) {
+            case "English" -> "Membership";
+            case "Français" -> "Abonnement";
+            default -> "Membresía";
+        };
+    }
+
+    private void actualizarControlesMembresia(
+            Label estado,
+            Button suscribirse,
+            Button cancelar
+    ) {
+        try {
+            MembresiaDAO.Membresia plan =
+                    new MembresiaDAO().obtenerParaUsuario(usuarioSesion.idUsuario());
+            boolean activa = MembresiaDAO.PLAN_PRUEBA_ID.equals(plan.idTipos());
+
+            estado.setText(switch (idiomaActual) {
+                case "English" -> "Current plan: " + plan.nombre()
+                        + (activa ? " (Tourism included)" : " (General chat)");
+                case "Français" -> "Offre actuelle : " + plan.nombre()
+                        + (activa ? " (Tourisme inclus)" : " (Chat général)");
+                default -> "Plan actual: " + plan.nombre()
+                        + (activa ? " (incluye Turismo)" : " (chat General)");
+            });
+
+            suscribirse.setText(switch (idiomaActual) {
+                case "English" -> "Activate test subscription";
+                case "Français" -> "Activer l’abonnement d’essai";
+                default -> "Activar suscripción de prueba";
+            });
+            cancelar.setText(switch (idiomaActual) {
+                case "English" -> "Cancel subscription";
+                case "Français" -> "Annuler l’abonnement";
+                default -> "Cancelar suscripción";
+            });
+            suscribirse.setDisable(activa);
+            cancelar.setDisable(!activa);
+        } catch (SQLException error) {
+            estado.setText(switch (idiomaActual) {
+                case "English" -> "Could not load membership: " + error.getMessage();
+                case "Français" -> "Impossible de charger l’abonnement : " + error.getMessage();
+                default -> "No se pudo cargar la membresía: " + error.getMessage();
+            });
+            suscribirse.setDisable(true);
+            cancelar.setDisable(true);
+        }
+    }
+
+    private void confirmarCambioMembresia(
+            boolean activar,
+            Label estado,
+            Button suscribirse,
+            Button cancelar
+    ) {
+        String titulo = switch (idiomaActual) {
+            case "English" -> activar
+                    ? "Confirm test subscription"
+                    : "Confirm cancellation";
+            case "Français" -> activar
+                    ? "Confirmer l’abonnement d’essai"
+                    : "Confirmer l’annulation";
+            default -> activar
+                    ? "Confirmar suscripción de prueba"
+                    : "Confirmar cancelación";
+        };
+        String contenido = switch (idiomaActual) {
+            case "English" -> activar
+                    ? "This is a project simulation. No payment will be processed. Activate the test Plus plan and unlock Tourism?"
+                    : "The test plan will be cancelled and your account will return to Basic. Continue?";
+            case "Français" -> activar
+                    ? "Ceci est une simulation du projet. Aucun paiement ne sera effectué. Activer l’offre Plus d’essai et le mode Tourisme ?"
+                    : "L’offre d’essai sera annulée et votre compte repassera à l’offre de base. Continuer ?";
+            default -> activar
+                    ? "Esta es una simulación para el proyecto. No se procesará ningún pago. ¿Quieres activar el plan Plus de prueba y habilitar Turismo?"
+                    : "Se cancelará el plan de prueba y se restaurará la membresía Básica. ¿Quieres continuar?";
+        };
+        String aceptar = switch (idiomaActual) {
+            case "English" -> activar ? "Yes, activate" : "Yes, cancel";
+            case "Français" -> activar ? "Oui, activer" : "Oui, annuler";
+            default -> activar ? "Sí, activar" : "Sí, cancelar";
+        };
+
+        ButtonType confirmar = new ButtonType(
+                aceptar,
+                ButtonBar.ButtonData.OK_DONE
+        );
+        Alert confirmacion = new Alert(Alert.AlertType.CONFIRMATION);
+        confirmacion.setTitle(titulo);
+        confirmacion.setHeaderText(null);
+        confirmacion.setContentText(contenido);
+        confirmacion.getButtonTypes().setAll(confirmar, ButtonType.CANCEL);
+        confirmacion.initOwner(chatView.getScene().getWindow());
+
+        if (confirmacion.showAndWait().orElse(ButtonType.CANCEL) != confirmar) {
+            return;
+        }
+
+        String nuevoIdTipos = activar
+                ? MembresiaDAO.PLAN_PRUEBA_ID
+                : MembresiaDAO.PLAN_BASICO_ID;
+        try {
+            new MembresiaDAO().asignar(
+                    usuarioSesion.idUsuario(),
+                    nuevoIdTipos
+            );
+            usuarioSesion = new UsuarioSesion(
+                    usuarioSesion.idUsuario(),
+                    usuarioSesion.username(),
+                    usuarioSesion.idConfig(),
+                    nuevoIdTipos
+            );
+            aplicarBeneficiosMembresia();
+            actualizarControlesMembresia(estado, suscribirse, cancelar);
+
+            String resultado = switch (idiomaActual) {
+                case "English" -> activar
+                        ? "Test subscription activated. No payment was made."
+                        : "Subscription cancelled. Your account returned to Basic.";
+                case "Français" -> activar
+                        ? "Abonnement d’essai activé. Aucun paiement n’a été effectué."
+                        : "Abonnement annulé. Votre compte est repassé à l’offre de base.";
+                default -> activar
+                        ? "Suscripción de prueba activada. No se realizó ningún pago."
+                        : "Suscripción cancelada. Tu cuenta volvió al plan Básico.";
+            };
+            new Alert(Alert.AlertType.INFORMATION, resultado).showAndWait();
+        } catch (SQLException error) {
+            new Alert(
+                    Alert.AlertType.ERROR,
+                    "No se pudo cambiar la membresía: " + error.getMessage()
+            ).showAndWait();
+        }
+    }
+
+    private boolean puedeUsarEspecialidad() {
+        return usuarioSesion != null
+                && MembresiaDAO.PLAN_PRUEBA_ID.equalsIgnoreCase(
+                        usuarioSesion.idTipos().trim()
+                );
+    }
+
+    private void aplicarBeneficiosMembresia() {
+        if (specialtyCombo == null || usuarioSesion == null) {
+            return;
+        }
+
+        String modoAnterior = specialtyCombo.getValue();
+        specialtyCombo.getItems().setAll("General");
+        if (puedeUsarEspecialidad()) {
+            specialtyCombo.getItems().add("Turismo");
+        }
+
+        if ("Turismo".equals(modoAnterior) && !puedeUsarEspecialidad()) {
+            specialtyCombo.setValue("General");
+        } else if (modoAnterior == null) {
+            specialtyCombo.setValue("General");
+        } else {
+            specialtyCombo.setValue(modoAnterior);
+        }
+        specialtyCombo.setDisable(idChatActual != null);
+        actualizarEstiloEspecialidad(specialtyCombo.getValue());
     }
 
     private void aplicarPreferencias(
@@ -776,6 +978,15 @@ public class ChatController {
 
         boolean modoTurismo =
                 "Turismo".equals(specialtyCombo.getValue());
+        if (modoTurismo && !puedeUsarEspecialidad()) {
+            new Alert(
+                    Alert.AlertType.WARNING,
+                    "El modo Turismo requiere activar la suscripción de prueba desde Preferencias."
+            ).showAndWait();
+            specialtyCombo.setValue("General");
+            actualizarEstiloEspecialidad("General");
+            return;
+        }
 
         String instruccionTono = tonoIAActual.equals("Informal")
                 ? "Responde con un tono informal y cercano.\n\n"
@@ -1801,6 +2012,7 @@ public class ChatController {
     public void setUsuarioSesion(UsuarioSesion usuarioSesion) {
         this.usuarioSesion = usuarioSesion;
         UsuarioHerramientas.establecerUsuarioActual(usuarioSesion.idUsuario());
+        aplicarBeneficiosMembresia();
 
         try {
             ConfiguracionDAO.Preferencias preferencias =
