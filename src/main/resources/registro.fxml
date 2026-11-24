@@ -26,7 +26,7 @@
     <TextField fx:id="nombreField" promptText="Nombre"/>
     <TextField fx:id="apellidosField" promptText="Apellidos"/>
     <TextField fx:id="correoField" promptText="Correo electrónico"/>
-    <PasswordField fx:id="passwordField" promptText="Contraseña (mínimo 8 caracteres)"/>
+    <PasswordField fx:id="passwordField" promptText="Contraseña (mínimo 5 caracteres)"/>
 
     <Button text="Registrar" onAction="#registrar"
             style="-fx-background-color: #18a6a6; -fx-text-fill: white; -fx-font-weight: bold;"/>

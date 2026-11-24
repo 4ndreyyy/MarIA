@@ -36,9 +36,9 @@ public class UsuarioDAO {
         validar(correo, "correo");
         validar(idTipos, "membresía");
 
-        if (contrasena == null || contrasena.length < 8) {
+        if (contrasena == null || contrasena.length < 5) {
             throw new IllegalArgumentException(
-                    "La contraseña debe tener al menos 8 caracteres.");
+                    "La contraseña debe tener al menos 5 caracteres.");
         }
 
         String idUsuario = nuevoId();

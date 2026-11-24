@@ -1526,6 +1526,19 @@ public class ChatController {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
+            <script>
+                    window.MathJax = {
+                        tex: {
+                            inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+                            displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
+                            processEscapes: true
+                        },
+                        options: {
+                            skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+                        }
+                    };
+                    </script>
+                    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
             <style>
             * { box-sizing: border-box; }
             html { scroll-behavior: smooth; }
@@ -1632,6 +1645,18 @@ public class ChatController {
 
             .content { overflow-wrap: anywhere; }
             p { margin: 6px 0 13px; }
+            mjx-container {
+                        color: __COLOR_TEXTO__;
+                    }
+                
+                    mjx-container[display="true"] {
+                        display: block;
+                        max-width: 100%;
+                        overflow-x: auto;
+                        overflow-y: hidden;
+                        margin: 12px 0;
+                        padding: 5px 0;
+                    }
 
             h1, h2, h3 {
                 margin: 21px 0 9px;
